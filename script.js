@@ -8,9 +8,10 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 // VARIABLES GLOBALES
 // ============================================
 let listaPDFs = [];
-let pageFlip = null;
+let pdfDocActual = null;
 let totalPaginas = 1;
 let paginaActual = 1;
+let renderizando = false;
 
 // ============================================
 // CARGAR LISTA
@@ -65,15 +66,15 @@ function cargarGaleria() {
                 <div class="categoria">Documento PDF</div>
             </div>
         `;
-        tarjeta.onclick = () => abrirFlipbook(index);
+        tarjeta.onclick = () => abrirVisor(index);
         galeria.appendChild(tarjeta);
     });
 }
 
 // ============================================
-// ABRIR FLIPBOOK (EFECTO HOJA COMPLETA)
+// ABRIR VISOR
 // ============================================
-async function abrirFlipbook(index) {
+async function abrirVisor(index) {
     const pdf = listaPDFs[index];
     
     document.querySelector('.galeria-container').style.display = 'none';
@@ -81,180 +82,197 @@ async function abrirFlipbook(index) {
     document.getElementById('visor').classList.remove('oculto');
     document.getElementById('titulo-libro').textContent = pdf.titulo;
 
-    const flipbookDiv = document.getElementById('flipbook');
-    flipbookDiv.innerHTML = '';
+    const container = document.getElementById('pdf-page-container');
+    container.innerHTML = `
+        <div class="loader">
+            <div class="spinner"></div>
+            <p>Cargando documento...</p>
+        </div>
+    `;
 
     try {
-        const loadingTask = pdfjsLib.getDocument(pdf.archivo);
-        const pdfDoc = await loadingTask.promise;
-        totalPaginas = pdfDoc.numPages;
+        // Cargar el PDF
+        pdfDocActual = await pdfjsLib.getDocument(pdf.archivo).promise;
+        totalPaginas = pdfDocActual.numPages;
+        paginaActual = 1;
 
-        // ============ CÁLCULO DE DIMENSIONES ============
-        // Obtenemos el tamaño real de la primera página
-        const primeraPagina = await pdfDoc.getPage(1);
-        const viewportOriginal = primeraPagina.getViewport({ scale: 1 });
-        const ratioOriginal = viewportOriginal.width / viewportOriginal.height;
-
-        // Calcular espacio disponible en pantalla
-        const wrapper = document.querySelector('.flipbook-wrapper');
-        const anchoDisponible = wrapper.clientWidth - 40;
-        const altoDisponible = wrapper.clientHeight - 40;
-
-        // Ajustar respetando la relación de aspecto (SIN DISTORSIÓN)
-        let anchoFinal, altoFinal;
-        if (anchoDisponible / altoDisponible > ratioOriginal) {
-            // Limitado por altura
-            altoFinal = altoDisponible;
-            anchoFinal = altoFinal * ratioOriginal;
-        } else {
-            // Limitado por ancho
-            anchoFinal = anchoDisponible;
-            altoFinal = anchoFinal / ratioOriginal;
-        }
-
-        // Limitar tamaño máximo para que no se vea gigante
-        const maxAncho = 700;
-        const maxAlto = 900;
-        if (anchoFinal > maxAncho) {
-            anchoFinal = maxAncho;
-            altoFinal = anchoFinal / ratioOriginal;
-        }
-        if (altoFinal > maxAlto) {
-            altoFinal = maxAlto;
-            anchoFinal = altoFinal * ratioOriginal;
-        }
-
-        // Redondear para evitar problemas
-        anchoFinal = Math.round(anchoFinal);
-        altoFinal = Math.round(altoFinal);
-
-        // Calcular escala para renderizar el PDF con alta calidad
-        // Usamos 2x para pantallas retina, sin distorsión
-        const escalaRender = (anchoFinal / viewportOriginal.width) * 2;
-
-        // ============ CREAR PÁGINAS ============
-        for (let i = 1; i <= totalPaginas; i++) {
-            const page = await pdfDoc.getPage(i);
-            const viewport = page.getViewport({ scale: escalaRender });
-            
-            const canvas = document.createElement('canvas');
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
-            
-            const context = canvas.getContext('2d');
-            await page.render({
-                canvasContext: context,
-                viewport: viewport
-            }).promise;
-
-            const divPagina = document.createElement('div');
-            divPagina.className = 'pagina';
-            divPagina.appendChild(canvas);
-            flipbookDiv.appendChild(divPagina);
-        }
-
-        // ============ INICIALIZAR STPAGEFLIP ============
-        // IMPORTANTE: usePortrait:true + showCover:true = efecto de hoja completa
-        pageFlip = new St.PageFlip(flipbookDiv, {
-            width: anchoFinal,
-            height: altoFinal,
-            size: 'fixed',          // Tamaño fijo, respeta dimensiones
-            showCover: true,        // Trata la primera página como portada (hoja completa)
-            usePortrait: true,      // MODO VERTICAL: una sola página a la vez
-            maxShadowOpacity: 0.5,
-            mobileScrollSupport: false,
-            flippingTime: 800,
-            drawShadow: true,
-            startZIndex: 0,
-            autoSize: false,
-            clickEventForward: true,
-            useMouseEvents: true,
-            swipeDistance: 30,
-            showPageCorners: true,
-            disableFlipByClick: false
-        });
-
-        const paginas = flipbookDiv.querySelectorAll('.pagina');
-        pageFlip.loadFromHTML(paginas);
-
-        // Forzar tamaño de canvas dentro de las páginas
-        paginas.forEach(p => {
-            const canvas = p.querySelector('canvas');
-            if (canvas) {
-                canvas.style.width = '100%';
-                canvas.style.height = '100%';
-                canvas.style.objectFit = 'contain';
-            }
-        });
-
-        // ============ EVENTOS ============
-        pageFlip.on('flip', (e) => {
-            paginaActual = e.data + 1;
-            actualizarIndicadores(paginaActual);
-        });
-
-        actualizarIndicadores(1);
+        // Renderizar la primera página
+        await renderizarPagina(paginaActual);
+        actualizarControles();
 
     } catch (error) {
         console.error('Error al cargar PDF:', error);
-        alert('No se pudo cargar el PDF. Verifica el nombre en lista.json.');
+        container.innerHTML = `
+            <div style="color:white; text-align:center; padding: 40px;">
+                <h2>❌ No se pudo cargar el documento</h2>
+                <p style="opacity:0.7; margin-top:10px;">
+                    Verifica que el archivo <strong>${pdf.archivo}</strong> exista en GitHub.
+                </p>
+            </div>
+        `;
     }
 }
 
 // ============================================
-// ACTUALIZAR INDICADORES
+// RENDERIZAR PÁGINA ACTUAL
 // ============================================
-function actualizarIndicadores(pagina) {
-    document.getElementById('indicador-pagina').textContent = 
-        `${pagina} / ${totalPaginas}`;
+async function renderizarPagina(numeroPagina) {
+    if (!pdfDocActual || renderizando) return;
+    renderizando = true;
+
+    const container = document.getElementById('pdf-page-container');
     
-    const progreso = (pagina / totalPaginas) * 100;
+    // Animación de salida
+    container.classList.add('saliendo');
+    
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    try {
+        const page = await pdfDocActual.getPage(numeroPagina);
+        
+        // Calcular dimensiones para que quepa en pantalla SIN reducir el PDF
+        const wrapper = document.querySelector('.pdf-wrapper');
+        const anchoDisponible = wrapper.clientWidth - 20;
+        const altoDisponible = wrapper.clientHeight - 20;
+        
+        // Viewport a escala 1 para obtener tamaño real
+        const viewportBase = page.getViewport({ scale: 1 });
+        const ratio = viewportBase.width / viewportBase.height;
+        
+        // Calcular escala para llenar el espacio disponible respetando el ratio
+        let escala;
+        if (anchoDisponible / altoDisponible > ratio) {
+            // Limitado por altura
+            escala = altoDisponible / viewportBase.height;
+        } else {
+            // Limitado por ancho
+            escala = anchoDisponible / viewportBase.width;
+        }
+        
+        // Multiplicar por 2 para alta calidad (retina display)
+        const escalaFinal = escala * 2;
+        
+        const viewport = page.getViewport({ scale: escalaFinal });
+        
+        // Crear canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        
+        // Ajustar tamaño visual del canvas al tamaño disponible
+        canvas.style.width = (viewport.width / 2) + 'px';
+        canvas.style.height = (viewport.height / 2) + 'px';
+        
+        const context = canvas.getContext('2d');
+        await page.render({
+            canvasContext: context,
+            viewport: viewport
+        }).promise;
+
+        // Reemplazar contenido
+        container.innerHTML = '';
+        container.appendChild(canvas);
+        
+        // Animación de entrada
+        container.classList.remove('saliendo');
+        container.classList.add('entrando');
+        
+        await new Promise(resolve => setTimeout(resolve, 50));
+        container.classList.remove('entrando');
+
+        actualizarIndicadores();
+
+    } catch (error) {
+        console.error('Error al renderizar página:', error);
+    } finally {
+        renderizando = false;
+    }
+}
+
+// ============================================
+// NAVEGACIÓN
+// ============================================
+async function paginaAnterior() {
+    if (paginaActual > 1 && !renderizando) {
+        paginaActual--;
+        await renderizarPagina(paginaActual);
+        actualizarControles();
+    }
+}
+
+async function paginaSiguiente() {
+    if (paginaActual < totalPaginas && !renderizando) {
+        paginaActual++;
+        await renderizarPagina(paginaActual);
+        actualizarControles();
+    }
+}
+
+// ============================================
+// ACTUALIZAR INDICADORES Y BOTONES
+// ============================================
+function actualizarIndicadores() {
+    document.getElementById('indicador-pagina').textContent = 
+        `${paginaActual} / ${totalPaginas}`;
+    
+    const progreso = (paginaActual / totalPaginas) * 100;
     document.getElementById('progreso-relleno').style.width = progreso + '%';
 }
 
-// ============================================
-// CONTROLES
-// ============================================
-function paginaAnterior() {
-    if (pageFlip) pageFlip.flipPrev();
+function actualizarControles() {
+    const btnPrev = document.querySelectorAll('.nav-prev, .btn-control')[0];
+    const btnNext = document.querySelectorAll('.nav-next, .btn-control')[1];
+    
+    // Deshabilitar si estamos en los extremos
+    const btnPrevLateral = document.getElementById('btn-prev');
+    const btnNextLateral = document.getElementById('btn-next');
+    
+    if (paginaActual <= 1) {
+        if (btnPrevLateral) btnPrevLateral.disabled = true;
+    } else {
+        if (btnPrevLateral) btnPrevLateral.disabled = false;
+    }
+    
+    if (paginaActual >= totalPaginas) {
+        if (btnNextLateral) btnNextLateral.disabled = true;
+    } else {
+        if (btnNextLateral) btnNextLateral.disabled = false;
+    }
 }
 
-function paginaSiguiente() {
-    if (pageFlip) pageFlip.flipNext();
-}
-
+// ============================================
+// CERRAR VISOR
+// ============================================
 function cerrarVisor() {
     document.getElementById('visor').classList.add('oculto');
     document.querySelector('.galeria-container').style.display = 'block';
     document.querySelector('.header').style.display = 'block';
     
-    if (pageFlip) {
-        pageFlip.destroy();
-        pageFlip = null;
-    }
-    document.getElementById('flipbook').innerHTML = '';
+    pdfDocActual = null;
+    paginaActual = 1;
+    totalPaginas = 1;
+    document.getElementById('pdf-page-container').innerHTML = '';
 }
 
 // ============================================
 // TECLADO
 // ============================================
 document.addEventListener('keydown', (e) => {
-    if (!pageFlip) return;
+    if (document.getElementById('visor').classList.contains('oculto')) return;
     if (e.key === 'ArrowLeft') paginaAnterior();
     if (e.key === 'ArrowRight') paginaSiguiente();
     if (e.key === 'Escape') cerrarVisor();
 });
 
 // ============================================
-// REDIMENSIONAR
+// RESIZE
 // ============================================
 let resizeTimeout;
 window.addEventListener('resize', () => {
     clearTimeout(resizeTimeout);
     resizeTimeout = setTimeout(() => {
-        if (pageFlip && !document.getElementById('visor').classList.contains('oculto')) {
-            // Reajustar si es necesario (recargar el PDF)
-            // Por simplicidad, no recargamos automáticamente
+        if (pdfDocActual && !document.getElementById('visor').classList.contains('oculto')) {
+            renderizarPagina(paginaActual);
         }
     }, 300);
 });
