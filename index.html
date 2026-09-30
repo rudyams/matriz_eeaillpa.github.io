@@ -3,41 +3,74 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mi Biblioteca de Flipbooks</title>
+    <title>Biblioteca Digital - EEA Illpa Puno</title>
     <link rel="stylesheet" href="style.css">
     
-    <!-- Librería para renderizar PDFs -->
+    <!-- PDF.js para renderizar PDFs -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     
-    <!-- Librería StPageFlip para el efecto de pasar página -->
-    <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
+    <!-- jQuery (requerido por Turn.js) -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    
+    <!-- Turn.js para el efecto de volteo vertical -->
+    <script src="https://cdn.jsdelivr.net/npm/turn.js@4.1.0/turn.min.js"></script>
 </head>
 <body>
-    <header>
-        <h1>📚 Mi Biblioteca de Flipbooks</h1>
-        <p>Selecciona un documento para verlo con efecto de libro</p>
+    <!-- ENCABEZADO -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo-area">
+                <div class="logo-icon">📖</div>
+                <div>
+                    <h1>Biblioteca Digital</h1>
+                    <p>EEA Illpa - Puno 2026</p>
+                </div>
+            </div>
+            <div class="header-info">
+                <span id="contador-docs">0 documentos</span>
+            </div>
+        </div>
     </header>
 
-    <!-- GALERÍA DE PDFs -->
-    <section id="galeria" class="galeria">
-        <!-- Los PDFs se cargan dinámicamente desde script.js -->
-    </section>
+    <!-- GALERÍA -->
+    <main class="galeria-container">
+        <div class="galeria-header">
+            <h2>Documentos disponibles</h2>
+            <p>Selecciona un documento para visualizarlo</p>
+        </div>
+        <section id="galeria" class="galeria">
+            <!-- Se carga dinámicamente -->
+        </section>
+    </main>
 
-    <!-- VISOR DE FLIPBOOK (oculto al inicio) -->
+    <!-- VISOR DE FLIPBOOK -->
     <section id="visor" class="visor oculto">
         <div class="visor-header">
-            <button onclick="cerrarVisor()">← Volver a la galería</button>
+            <button class="btn-volver" onclick="cerrarVisor()">
+                <span>←</span> Volver
+            </button>
             <h2 id="titulo-libro">Documento</h2>
-            <span id="indicador-pagina">Página 1 / 1</span>
+            <div class="visor-info">
+                <span id="indicador-pagina">1 / 1</span>
+            </div>
         </div>
         
-        <div class="flipbook-container">
+        <div class="flipbook-wrapper">
             <div id="flipbook"></div>
         </div>
         
         <div class="controles">
-            <button onclick="paginaAnterior()">← Anterior</button>
-            <button onclick="paginaSiguiente()">Siguiente →</button>
+            <button class="btn-control" onclick="paginaAnterior()">
+                <span>▲</span> Anterior
+            </button>
+            <div class="progreso-container">
+                <div class="progreso-barra">
+                    <div id="progreso-relleno" class="progreso-relleno"></div>
+                </div>
+            </div>
+            <button class="btn-control" onclick="paginaSiguiente()">
+                Siguiente <span>▼</span>
+            </button>
         </div>
     </section>
 
