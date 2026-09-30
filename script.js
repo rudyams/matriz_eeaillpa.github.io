@@ -8,12 +8,12 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 // VARIABLES GLOBALES
 // ============================================
 let listaPDFs = [];
-let turnInstance = null;
+let pageFlip = null;
 let totalPaginas = 1;
 let paginaActual = 1;
 
 // ============================================
-// CARGAR LISTA DE PDFs
+// CARGAR LISTA
 // ============================================
 async function cargarListaPDFs() {
     try {
@@ -30,7 +30,6 @@ async function cargarListaPDFs() {
         document.getElementById('galeria').innerHTML = `
             <div style="grid-column: 1/-1; text-align: center; padding: 60px 20px;">
                 <h2 style="color:#e53e3e;">⚠️ No se encontró lista.json</h2>
-                <p style="color:#718096; margin-top:10px;">Crea el archivo lista.json con tus documentos.</p>
             </div>
         `;
     }
@@ -47,7 +46,6 @@ function cargarGaleria() {
         galeria.innerHTML = `
             <div style="grid-column: 1/-1; text-align: center; padding: 60px 20px;">
                 <h2 style="color:#718096;">📭 No hay documentos</h2>
-                <p>Agrega tus PDFs al archivo lista.json</p>
             </div>
         `;
         return;
@@ -73,13 +71,12 @@ function cargarGaleria() {
 }
 
 // ============================================
-// ABRIR FLIPBOOK CON VOLTEO VERTICAL
+// ABRIR FLIPBOOK (EFECTO HOJA COMPLETA)
 // ============================================
 async function abrirFlipbook(index) {
     const pdf = listaPDFs[index];
     
-    // Mostrar visor
-    document.getElementById('galeria').closest('.galeria-container').style.display = 'none';
+    document.querySelector('.galeria-container').style.display = 'none';
     document.querySelector('.header').style.display = 'none';
     document.getElementById('visor').classList.remove('oculto');
     document.getElementById('titulo-libro').textContent = pdf.titulo;
@@ -92,21 +89,53 @@ async function abrirFlipbook(index) {
         const pdfDoc = await loadingTask.promise;
         totalPaginas = pdfDoc.numPages;
 
-        // Determinar dimensiones basadas en la primera página
+        // ============ CÁLCULO DE DIMENSIONES ============
+        // Obtenemos el tamaño real de la primera página
         const primeraPagina = await pdfDoc.getPage(1);
-        const viewportBase = primeraPagina.getViewport({ scale: 1 });
-        
-        // Calcular escala para que quepa en pantalla
-        const maxWidth = Math.min(window.innerWidth * 0.5, 500);
-        const maxHeight = window.innerHeight * 0.7;
-        const escalaW = maxWidth / viewportBase.width;
-        const escalaH = maxHeight / viewportBase.height;
-        const escala = Math.min(escalaW, escalaH, 2);
+        const viewportOriginal = primeraPagina.getViewport({ scale: 1 });
+        const ratioOriginal = viewportOriginal.width / viewportOriginal.height;
 
-        // Crear todas las páginas como canvas
+        // Calcular espacio disponible en pantalla
+        const wrapper = document.querySelector('.flipbook-wrapper');
+        const anchoDisponible = wrapper.clientWidth - 40;
+        const altoDisponible = wrapper.clientHeight - 40;
+
+        // Ajustar respetando la relación de aspecto (SIN DISTORSIÓN)
+        let anchoFinal, altoFinal;
+        if (anchoDisponible / altoDisponible > ratioOriginal) {
+            // Limitado por altura
+            altoFinal = altoDisponible;
+            anchoFinal = altoFinal * ratioOriginal;
+        } else {
+            // Limitado por ancho
+            anchoFinal = anchoDisponible;
+            altoFinal = anchoFinal / ratioOriginal;
+        }
+
+        // Limitar tamaño máximo para que no se vea gigante
+        const maxAncho = 700;
+        const maxAlto = 900;
+        if (anchoFinal > maxAncho) {
+            anchoFinal = maxAncho;
+            altoFinal = anchoFinal / ratioOriginal;
+        }
+        if (altoFinal > maxAlto) {
+            altoFinal = maxAlto;
+            anchoFinal = altoFinal * ratioOriginal;
+        }
+
+        // Redondear para evitar problemas
+        anchoFinal = Math.round(anchoFinal);
+        altoFinal = Math.round(altoFinal);
+
+        // Calcular escala para renderizar el PDF con alta calidad
+        // Usamos 2x para pantallas retina, sin distorsión
+        const escalaRender = (anchoFinal / viewportOriginal.width) * 2;
+
+        // ============ CREAR PÁGINAS ============
         for (let i = 1; i <= totalPaginas; i++) {
             const page = await pdfDoc.getPage(i);
-            const viewport = page.getViewport({ scale: escala });
+            const viewport = page.getViewport({ scale: escalaRender });
             
             const canvas = document.createElement('canvas');
             canvas.width = viewport.width;
@@ -120,32 +149,49 @@ async function abrirFlipbook(index) {
 
             const divPagina = document.createElement('div');
             divPagina.className = 'pagina';
-            divPagina.style.width = viewport.width + 'px';
-            divPagina.style.height = viewport.height + 'px';
             divPagina.appendChild(canvas);
             flipbookDiv.appendChild(divPagina);
         }
 
-        // Inicializar Turn.js con efecto VERTICAL
-        turnInstance = $(flipbookDiv).turn({
-            width: parseInt(flipbookDiv.children[0].style.width),
-            height: parseInt(flipbookDiv.children[0].style.height),
-            autoCenter: true,
-            display: 'single',      // Una página a la vez
-            duration: 800,          // Duración de animación
-            gradients: true,        // Degradados en el pliegue
-            elevation: 50,
-            acceleration: true,
-            when: {
-                turned: function(e, page) {
-                    paginaActual = page;
-                    actualizarIndicadores(page);
-                }
+        // ============ INICIALIZAR STPAGEFLIP ============
+        // IMPORTANTE: usePortrait:true + showCover:true = efecto de hoja completa
+        pageFlip = new St.PageFlip(flipbookDiv, {
+            width: anchoFinal,
+            height: altoFinal,
+            size: 'fixed',          // Tamaño fijo, respeta dimensiones
+            showCover: true,        // Trata la primera página como portada (hoja completa)
+            usePortrait: true,      // MODO VERTICAL: una sola página a la vez
+            maxShadowOpacity: 0.5,
+            mobileScrollSupport: false,
+            flippingTime: 800,
+            drawShadow: true,
+            startZIndex: 0,
+            autoSize: false,
+            clickEventForward: true,
+            useMouseEvents: true,
+            swipeDistance: 30,
+            showPageCorners: true,
+            disableFlipByClick: false
+        });
+
+        const paginas = flipbookDiv.querySelectorAll('.pagina');
+        pageFlip.loadFromHTML(paginas);
+
+        // Forzar tamaño de canvas dentro de las páginas
+        paginas.forEach(p => {
+            const canvas = p.querySelector('canvas');
+            if (canvas) {
+                canvas.style.width = '100%';
+                canvas.style.height = '100%';
+                canvas.style.objectFit = 'contain';
             }
         });
 
-        // Aplicar dirección vertical (Turn.js no lo tiene nativo)
-        aplicarVolteoVertical();
+        // ============ EVENTOS ============
+        pageFlip.on('flip', (e) => {
+            paginaActual = e.data + 1;
+            actualizarIndicadores(paginaActual);
+        });
 
         actualizarIndicadores(1);
 
@@ -153,24 +199,6 @@ async function abrirFlipbook(index) {
         console.error('Error al cargar PDF:', error);
         alert('No se pudo cargar el PDF. Verifica el nombre en lista.json.');
     }
-}
-
-// ============================================
-// APLICAR EFECTO VERTICAL CON CSS
-// ============================================
-function aplicarVolteoVertical() {
-    // Rotar el contenedor 90 grados para simular volteo vertical
-    const wrapper = document.querySelector('.flipbook-wrapper');
-    const flipbook = document.getElementById('flipbook');
-    
-    if (!flipbook) return;
-    
-    // Aplicar rotación al flipbook
-    flipbook.style.transform = 'rotate(-90deg)';
-    flipbook.style.transformOrigin = 'center center';
-    
-    // Ajustar el wrapper
-    wrapper.style.padding = '80px 20px';
 }
 
 // ============================================
@@ -188,43 +216,47 @@ function actualizarIndicadores(pagina) {
 // CONTROLES
 // ============================================
 function paginaAnterior() {
-    if (turnInstance) {
-        const actual = turnInstance.turn('page');
-        if (actual > 1) {
-            turnInstance.turn('previous');
-        }
-    }
+    if (pageFlip) pageFlip.flipPrev();
 }
 
 function paginaSiguiente() {
-    if (turnInstance) {
-        const actual = turnInstance.turn('page');
-        if (actual < totalPaginas) {
-            turnInstance.turn('next');
-        }
-    }
+    if (pageFlip) pageFlip.flipNext();
 }
 
 function cerrarVisor() {
     document.getElementById('visor').classList.add('oculto');
-    document.getElementById('galeria').closest('.galeria-container').style.display = 'block';
+    document.querySelector('.galeria-container').style.display = 'block';
     document.querySelector('.header').style.display = 'block';
     
-    if (turnInstance) {
-        try { turnInstance.turn('destroy'); } catch(e) {}
-        turnInstance = null;
+    if (pageFlip) {
+        pageFlip.destroy();
+        pageFlip = null;
     }
     document.getElementById('flipbook').innerHTML = '';
 }
 
 // ============================================
-// NAVEGACIÓN CON TECLADO
+// TECLADO
 // ============================================
 document.addEventListener('keydown', (e) => {
-    if (!turnInstance) return;
-    if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') paginaAnterior();
-    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') paginaSiguiente();
+    if (!pageFlip) return;
+    if (e.key === 'ArrowLeft') paginaAnterior();
+    if (e.key === 'ArrowRight') paginaSiguiente();
     if (e.key === 'Escape') cerrarVisor();
+});
+
+// ============================================
+// REDIMENSIONAR
+// ============================================
+let resizeTimeout;
+window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+        if (pageFlip && !document.getElementById('visor').classList.contains('oculto')) {
+            // Reajustar si es necesario (recargar el PDF)
+            // Por simplicidad, no recargamos automáticamente
+        }
+    }, 300);
 });
 
 // ============================================
