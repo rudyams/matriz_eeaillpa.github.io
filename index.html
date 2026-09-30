@@ -8,9 +8,6 @@
     
     <!-- PDF.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    
-    <!-- StPageFlip -->
-    <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
 </head>
 <body>
     <header class="header">
@@ -36,6 +33,7 @@
         <section id="galeria" class="galeria"></section>
     </main>
 
+    <!-- VISOR -->
     <section id="visor" class="visor oculto">
         <div class="visor-header">
             <button class="btn-volver" onclick="cerrarVisor()">
@@ -47,22 +45,30 @@
             </div>
         </div>
         
-        <div class="flipbook-wrapper">
-            <div id="flipbook"></div>
+        <div class="pdf-wrapper">
+            <button class="nav-btn nav-prev" onclick="paginaAnterior()" id="btn-prev">‹</button>
+            <div id="pdf-viewer" class="pdf-viewer">
+                <div id="pdf-page-container" class="pdf-page-container">
+                    <!-- La página del PDF se renderiza aquí -->
+                </div>
+            </div>
+            <button class="nav-btn nav-next" onclick="paginaSiguiente()" id="btn-next">›</button>
         </div>
         
         <div class="controles">
-            <button class="btn-control" onclick="paginaAnterior()">
-                <span>←</span> Anterior
-            </button>
             <div class="progreso-container">
                 <div class="progreso-barra">
                     <div id="progreso-relleno" class="progreso-relleno"></div>
                 </div>
             </div>
-            <button class="btn-control" onclick="paginaSiguiente()">
-                Siguiente <span>→</span>
-            </button>
+            <div class="controles-botones">
+                <button class="btn-control" onclick="paginaAnterior()">
+                    <span>←</span> Anterior
+                </button>
+                <button class="btn-control" onclick="paginaSiguiente()">
+                    Siguiente <span>→</span>
+                </button>
+            </div>
         </div>
     </section>
 
