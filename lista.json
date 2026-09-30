@@ -1,0 +1,5 @@
+[
+    { "archivo": "pdf/matriz1.pdf", "titulo": "Matriz 1 - Declaración Jurada" },
+    { "archivo": "pdf/matriz2.pdf", "titulo": "Matriz 2 - Informe Mensual" },
+    { "archivo": "pdf/matriz3.pdf", "titulo": "Matriz 3 - Reporte Anual" }
+]
