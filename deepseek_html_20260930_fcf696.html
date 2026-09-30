@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Flipbook Personal</title>
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Librería para renderizar PDFs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    
+    <!-- Librería StPageFlip para el efecto de pasar página -->
+    <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
+</head>
+<body>
+    <header>
+        <h1>📚 Mi Biblioteca de Flipbooks</h1>
+        <p>Selecciona un documento para verlo con efecto de libro</p>
+    </header>
+
+    <!-- GALERÍA DE PDFs -->
+    <section id="galeria" class="galeria">
+        <!-- Los PDFs se cargan dinámicamente desde script.js -->
+    </section>
+
+    <!-- VISOR DE FLIPBOOK (oculto al inicio) -->
+    <section id="visor" class="visor oculto">
+        <div class="visor-header">
+            <button onclick="cerrarVisor()">← Volver a la galería</button>
+            <h2 id="titulo-libro">Documento</h2>
+            <span id="indicador-pagina">Página 1 / 1</span>
+        </div>
+        
+        <div class="flipbook-container">
+            <div id="flipbook"></div>
+        </div>
+        
+        <div class="controles">
+            <button onclick="paginaAnterior()">← Anterior</button>
+            <button onclick="paginaSiguiente()">Siguiente →</button>
+        </div>
+    </section>
+
+    <script src="script.js"></script>
+</body>
+</html>
