@@ -1,5 +1,5 @@
 // ============================================
-// CONFIGURACIÓN DEL WORKER DE PDF.JS
+// CONFIGURACIÓN DE PDF.JS
 // ============================================
 pdfjsLib.GlobalWorkerOptions.workerSrc = 
     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -7,33 +7,30 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 // ============================================
 // VARIABLES GLOBALES
 // ============================================
-let pageFlip = null;
-let paginaActual = 1;
-let totalPaginas = 1;
 let listaPDFs = [];
+let turnInstance = null;
+let totalPaginas = 1;
+let paginaActual = 1;
 
 // ============================================
-// CARGAR LA LISTA DE PDFs DESDE lista.json
+// CARGAR LISTA DE PDFs
 // ============================================
 async function cargarListaPDFs() {
     try {
         const respuesta = await fetch('lista.json');
         if (!respuesta.ok) throw new Error('No se encontró lista.json');
         listaPDFs = await respuesta.json();
+        
+        document.getElementById('contador-docs').textContent = 
+            `${listaPDFs.length} documento${listaPDFs.length !== 1 ? 's' : ''}`;
+        
         cargarGaleria();
     } catch (error) {
-        console.error('Error al cargar lista.json:', error);
+        console.error('Error:', error);
         document.getElementById('galeria').innerHTML = `
-            <div style="grid-column: 1/-1; text-align: center; color: white; padding: 40px;">
-                <h2>⚠️ No se encontró el archivo lista.json</h2>
-                <p>Crea un archivo llamado <strong>lista.json</strong> en la raíz de tu repositorio 
-                con la lista de tus PDFs. Ejemplo:</p>
-                <pre style="background: rgba(0,0,0,0.3); padding: 20px; border-radius: 8px; 
-                            text-align: left; margin-top: 15px; overflow-x: auto;">
-[
-    { "archivo": "pdf/matriz1.pdf", "titulo": "Matriz 1" },
-    { "archivo": "pdf/matriz2.pdf", "titulo": "Matriz 2" }
-]</pre>
+            <div style="grid-column: 1/-1; text-align: center; padding: 60px 20px;">
+                <h2 style="color:#e53e3e;">⚠️ No se encontró lista.json</h2>
+                <p style="color:#718096; margin-top:10px;">Crea el archivo lista.json con tus documentos.</p>
             </div>
         `;
     }
@@ -48,8 +45,8 @@ function cargarGaleria() {
 
     if (listaPDFs.length === 0) {
         galeria.innerHTML = `
-            <div style="grid-column: 1/-1; text-align: center; color: white; padding: 40px;">
-                <h2>📭 No hay documentos en la lista</h2>
+            <div style="grid-column: 1/-1; text-align: center; padding: 60px 20px;">
+                <h2 style="color:#718096;">📭 No hay documentos</h2>
                 <p>Agrega tus PDFs al archivo lista.json</p>
             </div>
         `;
@@ -57,11 +54,18 @@ function cargarGaleria() {
     }
 
     listaPDFs.forEach((pdf, index) => {
+        const numero = String(index + 1).padStart(2, '0');
         const tarjeta = document.createElement('div');
         tarjeta.className = 'tarjeta';
         tarjeta.innerHTML = `
-            <div class="icono">📕</div>
-            <h3>${pdf.titulo}</h3>
+            <div class="tarjeta-portada">
+                <div class="numero">${numero}</div>
+                <div class="placeholder">📕</div>
+            </div>
+            <div class="tarjeta-info">
+                <h3>${pdf.titulo}</h3>
+                <div class="categoria">Documento PDF</div>
+            </div>
         `;
         tarjeta.onclick = () => abrirFlipbook(index);
         galeria.appendChild(tarjeta);
@@ -69,33 +73,44 @@ function cargarGaleria() {
 }
 
 // ============================================
-// ABRIR EL FLIPBOOK
+// ABRIR FLIPBOOK CON VOLTEO VERTICAL
 // ============================================
 async function abrirFlipbook(index) {
     const pdf = listaPDFs[index];
     
-    document.getElementById('galeria').style.display = 'none';
-    document.querySelector('header').style.display = 'none';
+    // Mostrar visor
+    document.getElementById('galeria').closest('.galeria-container').style.display = 'none';
+    document.querySelector('.header').style.display = 'none';
     document.getElementById('visor').classList.remove('oculto');
     document.getElementById('titulo-libro').textContent = pdf.titulo;
 
-    const loadingTask = pdfjsLib.getDocument(pdf.archivo);
-    
+    const flipbookDiv = document.getElementById('flipbook');
+    flipbookDiv.innerHTML = '';
+
     try {
+        const loadingTask = pdfjsLib.getDocument(pdf.archivo);
         const pdfDoc = await loadingTask.promise;
         totalPaginas = pdfDoc.numPages;
 
-        const flipbookContainer = document.getElementById('flipbook');
-        flipbookContainer.innerHTML = '';
+        // Determinar dimensiones basadas en la primera página
+        const primeraPagina = await pdfDoc.getPage(1);
+        const viewportBase = primeraPagina.getViewport({ scale: 1 });
+        
+        // Calcular escala para que quepa en pantalla
+        const maxWidth = Math.min(window.innerWidth * 0.5, 500);
+        const maxHeight = window.innerHeight * 0.7;
+        const escalaW = maxWidth / viewportBase.width;
+        const escalaH = maxHeight / viewportBase.height;
+        const escala = Math.min(escalaW, escalaH, 2);
 
+        // Crear todas las páginas como canvas
         for (let i = 1; i <= totalPaginas; i++) {
             const page = await pdfDoc.getPage(i);
-            const viewport = page.getViewport({ scale: 1.5 });
+            const viewport = page.getViewport({ scale: escala });
             
             const canvas = document.createElement('canvas');
             canvas.width = viewport.width;
             canvas.height = viewport.height;
-            canvas.className = 'pagina-pdf';
             
             const context = canvas.getContext('2d');
             await page.render({
@@ -105,66 +120,114 @@ async function abrirFlipbook(index) {
 
             const divPagina = document.createElement('div');
             divPagina.className = 'pagina';
+            divPagina.style.width = viewport.width + 'px';
+            divPagina.style.height = viewport.height + 'px';
             divPagina.appendChild(canvas);
-            flipbookContainer.appendChild(divPagina);
+            flipbookDiv.appendChild(divPagina);
         }
 
-        pageFlip = new St.PageFlip(flipbookContainer, {
-            width: 550,
-            height: 733,
-            size: 'stretch',
-            minWidth: 300,
-            maxWidth: 700,
-            minHeight: 400,
-            maxHeight: 950,
-            showCover: true,
-            mobileScrollSupport: true
+        // Inicializar Turn.js con efecto VERTICAL
+        turnInstance = $(flipbookDiv).turn({
+            width: parseInt(flipbookDiv.children[0].style.width),
+            height: parseInt(flipbookDiv.children[0].style.height),
+            autoCenter: true,
+            display: 'single',      // Una página a la vez
+            duration: 800,          // Duración de animación
+            gradients: true,        // Degradados en el pliegue
+            elevation: 50,
+            acceleration: true,
+            when: {
+                turned: function(e, page) {
+                    paginaActual = page;
+                    actualizarIndicadores(page);
+                }
+            }
         });
 
-        pageFlip.loadFromHTML(document.querySelectorAll('.pagina'));
+        // Aplicar dirección vertical (Turn.js no lo tiene nativo)
+        aplicarVolteoVertical();
 
-        pageFlip.on('flip', (e) => {
-            paginaActual = e.data + 1;
-            document.getElementById('indicador-pagina').textContent = 
-                `Página ${paginaActual} / ${totalPaginas}`;
-        });
-
-        document.getElementById('indicador-pagina').textContent = 
-            `Página 1 / ${totalPaginas}`;
+        actualizarIndicadores(1);
 
     } catch (error) {
         console.error('Error al cargar PDF:', error);
-        alert('No se pudo cargar el PDF. Verifica que el archivo exista en la carpeta "pdf/" y que el nombre coincida exactamente con el de lista.json.');
+        alert('No se pudo cargar el PDF. Verifica el nombre en lista.json.');
     }
+}
+
+// ============================================
+// APLICAR EFECTO VERTICAL CON CSS
+// ============================================
+function aplicarVolteoVertical() {
+    // Rotar el contenedor 90 grados para simular volteo vertical
+    const wrapper = document.querySelector('.flipbook-wrapper');
+    const flipbook = document.getElementById('flipbook');
+    
+    if (!flipbook) return;
+    
+    // Aplicar rotación al flipbook
+    flipbook.style.transform = 'rotate(-90deg)';
+    flipbook.style.transformOrigin = 'center center';
+    
+    // Ajustar el wrapper
+    wrapper.style.padding = '80px 20px';
+}
+
+// ============================================
+// ACTUALIZAR INDICADORES
+// ============================================
+function actualizarIndicadores(pagina) {
+    document.getElementById('indicador-pagina').textContent = 
+        `${pagina} / ${totalPaginas}`;
+    
+    const progreso = (pagina / totalPaginas) * 100;
+    document.getElementById('progreso-relleno').style.width = progreso + '%';
 }
 
 // ============================================
 // CONTROLES
 // ============================================
 function paginaAnterior() {
-    if (pageFlip) pageFlip.flipPrev();
+    if (turnInstance) {
+        const actual = turnInstance.turn('page');
+        if (actual > 1) {
+            turnInstance.turn('previous');
+        }
+    }
 }
 
 function paginaSiguiente() {
-    if (pageFlip) pageFlip.flipNext();
+    if (turnInstance) {
+        const actual = turnInstance.turn('page');
+        if (actual < totalPaginas) {
+            turnInstance.turn('next');
+        }
+    }
 }
 
 function cerrarVisor() {
     document.getElementById('visor').classList.add('oculto');
-    document.getElementById('galeria').style.display = 'grid';
-    document.querySelector('header').style.display = 'block';
+    document.getElementById('galeria').closest('.galeria-container').style.display = 'block';
+    document.querySelector('.header').style.display = 'block';
     
-    if (pageFlip) {
-        pageFlip.destroy();
-        pageFlip = null;
+    if (turnInstance) {
+        try { turnInstance.turn('destroy'); } catch(e) {}
+        turnInstance = null;
     }
+    document.getElementById('flipbook').innerHTML = '';
 }
 
+// ============================================
+// NAVEGACIÓN CON TECLADO
+// ============================================
 document.addEventListener('keydown', (e) => {
-    if (!pageFlip) return;
-    if (e.key === 'ArrowLeft') paginaAnterior();
-    if (e.key === 'ArrowRight') paginaSiguiente();
+    if (!turnInstance) return;
+    if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') paginaAnterior();
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') paginaSiguiente();
     if (e.key === 'Escape') cerrarVisor();
 });
 
+// ============================================
+// INICIAR
+// ============================================
 document.addEventListener('DOMContentLoaded', cargarListaPDFs);
