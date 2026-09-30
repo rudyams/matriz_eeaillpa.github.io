@@ -272,18 +272,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: opacity 0.35s ease, transform 0.35s ease;
+    transition: opacity 0.3s ease, transform 0.3s ease;
     opacity: 1;
-}
-
-.pdf-page-container.saliendo {
-    opacity: 0;
-    transform: translateX(-30px);
-}
-
-.pdf-page-container.entrando {
-    opacity: 0;
-    transform: translateX(30px);
 }
 
 .pdf-page-container canvas {
@@ -295,7 +285,7 @@ body {
     max-height: 100%;
 }
 
-/* ============ NAV BUTTONS (laterales) ============ */
+/* ============ NAV BUTTONS ============ */
 .nav-btn {
     position: absolute;
     top: 50%;
