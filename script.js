@@ -74,7 +74,7 @@ function cargarGaleria() {
 }
 
 // ============================================
-// ABRIR VISOR (LIMPIEZA TOTAL)
+// ABRIR VISOR
 // ============================================
 async function abrirVisor(index) {
     if (bloqueado) return;
@@ -82,8 +82,7 @@ async function abrirVisor(index) {
     
     const pdf = listaPDFs[index];
     
-    // ===== LIMPIEZA TOTAL ANTES DE ABRIR =====
-    // Destruir PDF anterior si existe
+    // Limpieza total antes de abrir
     if (pdfDocActual) {
         try {
             await pdfDocActual.destroy();
@@ -91,11 +90,9 @@ async function abrirVisor(index) {
         pdfDocActual = null;
     }
     
-    // Resetear variables
     totalPaginas = 1;
     paginaActual = 1;
     
-    // Mostrar visor
     document.querySelector('.galeria-container').style.display = 'none';
     document.querySelector('.header').style.display = 'none';
     document.getElementById('visor').classList.remove('oculto');
@@ -110,7 +107,6 @@ async function abrirVisor(index) {
     `;
 
     try {
-        // Cargar el PDF con tarea de carga
         const loadingTask = pdfjsLib.getDocument({
             url: pdf.archivo,
             cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
@@ -151,7 +147,6 @@ async function mostrarPagina(numeroPagina) {
 
     const container = document.getElementById('pdf-page-container');
     
-    // Animación de salida
     container.style.transition = 'opacity 0.2s ease';
     container.style.opacity = '0';
     
@@ -177,7 +172,6 @@ async function mostrarPagina(numeroPagina) {
             altoFinal = anchoFinal / ratio;
         }
         
-        // Renderizar a escala alta
         const escala = Math.min(anchoFinal / viewportBase.width, 3);
         const viewportRender = page.getViewport({ scale: escala * 2 });
         
@@ -194,15 +188,12 @@ async function mostrarPagina(numeroPagina) {
             viewport: viewportRender
         }).promise;
 
-        // Limpiar y añadir nuevo canvas
         container.innerHTML = '';
         container.appendChild(canvas);
         
-        // Animación de entrada
         container.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
         container.style.opacity = '1';
         
-        // Forzar reflow
         void container.offsetWidth;
         
     } catch (error) {
@@ -262,10 +253,9 @@ function actualizarBotones() {
 }
 
 // ============================================
-// CERRAR VISOR (LIMPIEZA TOTAL)
+// CERRAR VISOR
 // ============================================
 async function cerrarVisor() {
-    // Destruir el PDF actual para liberar recursos
     if (pdfDocActual) {
         try {
             await pdfDocActual.destroy();
@@ -273,21 +263,26 @@ async function cerrarVisor() {
         pdfDocActual = null;
     }
     
-    // Resetear variables
     paginaActual = 1;
     totalPaginas = 1;
     bloqueado = false;
     
-    // Ocultar visor
     document.getElementById('visor').classList.add('oculto');
     document.querySelector('.galeria-container').style.display = 'block';
     document.querySelector('.header').style.display = 'block';
     
-    // Limpiar contenedor
     const container = document.getElementById('pdf-page-container');
     container.innerHTML = '';
     container.style.opacity = '1';
     container.style.transform = 'translateX(0)';
+}
+
+// ============================================
+// DETECTAR ?doc=XX EN LA URL
+// ============================================
+function obtenerDocDesdeURL() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('doc');
 }
 
 // ============================================
@@ -316,4 +311,19 @@ window.addEventListener('resize', () => {
 // ============================================
 // INICIAR
 // ============================================
-document.addEventListener('DOMContentLoaded', cargarListaPDFs);
+document.addEventListener('DOMContentLoaded', async () => {
+    await cargarListaPDFs();
+    
+    // Después de cargar la galería, verificar si hay un doc en la URL
+    const docParam = obtenerDocDesdeURL();
+    if (docParam) {
+        const index = listaPDFs.findIndex((pdf, i) => {
+            const num = String(i + 1).padStart(2, '0');
+            return num === docParam || pdf.archivo.includes(docParam);
+        });
+        
+        if (index !== -1) {
+            setTimeout(() => abrirVisor(index), 400);
+        }
+    }
+});
