@@ -11,14 +11,16 @@ let listaPDFs = [];
 let pdfDocActual = null;
 let totalPaginas = 1;
 let paginaActual = 1;
-let cargando = false;
+let bloqueado = false;
 
 // ============================================
-// CARGAR LISTA DE PDFs
+// CARGAR LISTA DE PDFs (SIN CACHÉ)
 // ============================================
 async function cargarListaPDFs() {
     try {
-        const respuesta = await fetch('lista.json?v=' + Date.now());
+        const respuesta = await fetch('lista.json?v=' + Date.now(), {
+            cache: 'no-store'
+        });
         if (!respuesta.ok) throw new Error('No se encontró lista.json');
         listaPDFs = await respuesta.json();
         
@@ -72,19 +74,28 @@ function cargarGaleria() {
 }
 
 // ============================================
-// ABRIR VISOR
+// ABRIR VISOR (LIMPIEZA TOTAL)
 // ============================================
 async function abrirVisor(index) {
-    if (cargando) return;
+    if (bloqueado) return;
+    bloqueado = true;
     
     const pdf = listaPDFs[index];
     
+    // ===== LIMPIEZA TOTAL ANTES DE ABRIR =====
+    // Destruir PDF anterior si existe
+    if (pdfDocActual) {
+        try {
+            await pdfDocActual.destroy();
+        } catch(e) { console.warn('Error destruyendo PDF anterior:', e); }
+        pdfDocActual = null;
+    }
+    
     // Resetear variables
-    pdfDocActual = null;
     totalPaginas = 1;
     paginaActual = 1;
-    cargando = true;
     
+    // Mostrar visor
     document.querySelector('.galeria-container').style.display = 'none';
     document.querySelector('.header').style.display = 'none';
     document.getElementById('visor').classList.remove('oculto');
@@ -99,31 +110,41 @@ async function abrirVisor(index) {
     `;
 
     try {
-        pdfDocActual = await pdfjsLib.getDocument(pdf.archivo).promise;
+        // Cargar el PDF con tarea de carga
+        const loadingTask = pdfjsLib.getDocument({
+            url: pdf.archivo,
+            cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+            cMapPacked: true
+        });
+        
+        pdfDocActual = await loadingTask.promise;
         totalPaginas = pdfDocActual.numPages;
         paginaActual = 1;
         
-        cargando = false;
         await mostrarPagina(paginaActual);
         actualizarIndicadores();
         actualizarBotones();
 
     } catch (error) {
-        cargando = false;
         console.error('Error al cargar PDF:', error);
         container.innerHTML = `
             <div style="color:white; text-align:center; padding: 40px;">
                 <h2>❌ No se pudo cargar el documento</h2>
                 <p style="opacity:0.7; margin-top:10px;">
-                    Verifica que el archivo <strong>${pdf.archivo}</strong> exista en GitHub.
+                    Ruta: <strong>${pdf.archivo}</strong>
+                </p>
+                <p style="opacity:0.5; margin-top:5px; font-size:0.85em;">
+                    Error: ${error.message || 'Desconocido'}
                 </p>
             </div>
         `;
+    } finally {
+        bloqueado = false;
     }
 }
 
 // ============================================
-// MOSTRAR PÁGINA (SIN REDUCIR, SIN DISTORSIONAR)
+// MOSTRAR PÁGINA
 // ============================================
 async function mostrarPagina(numeroPagina) {
     if (!pdfDocActual) return;
@@ -131,44 +152,38 @@ async function mostrarPagina(numeroPagina) {
     const container = document.getElementById('pdf-page-container');
     
     // Animación de salida
+    container.style.transition = 'opacity 0.2s ease';
     container.style.opacity = '0';
-    container.style.transform = 'translateX(-20px)';
     
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise(resolve => setTimeout(resolve, 180));
 
     try {
         const page = await pdfDocActual.getPage(numeroPagina);
         
-        // Tamaño real de la página a escala 1
         const viewportBase = page.getViewport({ scale: 1 });
         const ratio = viewportBase.width / viewportBase.height;
         
-        // Espacio disponible real del contenedor
         const wrapper = document.querySelector('.pdf-wrapper');
-        const anchoDisponible = wrapper.clientWidth - 20;
-        const altoDisponible = wrapper.clientHeight - 20;
+        const anchoDisponible = wrapper.clientWidth - 30;
+        const altoDisponible = wrapper.clientHeight - 30;
         
-        // Calcular dimensiones respetando el ratio (para que llene lo máximo posible)
         let anchoFinal, altoFinal;
         
         if (anchoDisponible / altoDisponible > ratio) {
-            // Limitado por altura → llena toda la altura
             altoFinal = altoDisponible;
             anchoFinal = altoFinal * ratio;
         } else {
-            // Limitado por ancho → llena todo el ancho
             anchoFinal = anchoDisponible;
             altoFinal = anchoFinal / ratio;
         }
         
-        // Renderizar a 2x de resolución para alta calidad (pero sin cambiar tamaño visual)
-        const viewportRender = page.getViewport({ scale: 2 });
+        // Renderizar a escala alta
+        const escala = Math.min(anchoFinal / viewportBase.width, 3);
+        const viewportRender = page.getViewport({ scale: escala * 2 });
         
         const canvas = document.createElement('canvas');
         canvas.width = viewportRender.width;
         canvas.height = viewportRender.height;
-        
-        // Tamaño visual EXACTO (sin reducción, llena la pantalla)
         canvas.style.width = anchoFinal + 'px';
         canvas.style.height = altoFinal + 'px';
         canvas.style.display = 'block';
@@ -179,17 +194,20 @@ async function mostrarPagina(numeroPagina) {
             viewport: viewportRender
         }).promise;
 
-        // Reemplazar contenido del contenedor
+        // Limpiar y añadir nuevo canvas
         container.innerHTML = '';
         container.appendChild(canvas);
         
         // Animación de entrada
         container.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
         container.style.opacity = '1';
-        container.style.transform = 'translateX(0)';
+        
+        // Forzar reflow
+        void container.offsetWidth;
         
     } catch (error) {
         console.error('Error al renderizar página:', error);
+        container.style.opacity = '1';
     }
 }
 
@@ -197,23 +215,27 @@ async function mostrarPagina(numeroPagina) {
 // NAVEGACIÓN
 // ============================================
 async function paginaAnterior() {
-    if (cargando || !pdfDocActual) return;
+    if (bloqueado || !pdfDocActual) return;
     if (paginaActual <= 1) return;
     
+    bloqueado = true;
     paginaActual--;
     await mostrarPagina(paginaActual);
     actualizarIndicadores();
     actualizarBotones();
+    bloqueado = false;
 }
 
 async function paginaSiguiente() {
-    if (cargando || !pdfDocActual) return;
+    if (bloqueado || !pdfDocActual) return;
     if (paginaActual >= totalPaginas) return;
     
+    bloqueado = true;
     paginaActual++;
     await mostrarPagina(paginaActual);
     actualizarIndicadores();
     actualizarBotones();
+    bloqueado = false;
 }
 
 // ============================================
@@ -234,26 +256,34 @@ function actualizarBotones() {
     if (btnPrev) btnPrev.disabled = (paginaActual <= 1);
     if (btnNext) btnNext.disabled = (paginaActual >= totalPaginas);
     
-    // Actualizar también los botones inferiores
     const botonesInferiores = document.querySelectorAll('.btn-control');
     if (botonesInferiores[0]) botonesInferiores[0].disabled = (paginaActual <= 1);
     if (botonesInferiores[1]) botonesInferiores[1].disabled = (paginaActual >= totalPaginas);
 }
 
 // ============================================
-// CERRAR VISOR
+// CERRAR VISOR (LIMPIEZA TOTAL)
 // ============================================
-function cerrarVisor() {
+async function cerrarVisor() {
+    // Destruir el PDF actual para liberar recursos
+    if (pdfDocActual) {
+        try {
+            await pdfDocActual.destroy();
+        } catch(e) { console.warn('Error al destruir:', e); }
+        pdfDocActual = null;
+    }
+    
+    // Resetear variables
+    paginaActual = 1;
+    totalPaginas = 1;
+    bloqueado = false;
+    
+    // Ocultar visor
     document.getElementById('visor').classList.add('oculto');
     document.querySelector('.galeria-container').style.display = 'block';
     document.querySelector('.header').style.display = 'block';
     
-    // Resetear todo
-    pdfDocActual = null;
-    paginaActual = 1;
-    totalPaginas = 1;
-    cargando = false;
-    
+    // Limpiar contenedor
     const container = document.getElementById('pdf-page-container');
     container.innerHTML = '';
     container.style.opacity = '1';
@@ -271,7 +301,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ============================================
-// RESIZE (re-renderizar al cambiar tamaño)
+// RESIZE
 // ============================================
 let resizeTimeout;
 window.addEventListener('resize', () => {
