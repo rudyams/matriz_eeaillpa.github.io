@@ -15,16 +15,27 @@ let bloqueado = false;
 
 let zoomActual = 1;
 let zoomMin = 1;
-let zoomMax = 5;
+let zoomMax = 6;         // Subimos el máximo a 600% para móviles
 let zoomPaso = 0.25;
 
 let arrastrando = false;
 let startX = 0, startY = 0;
 let scrollStartX = 0, scrollStartY = 0;
 
-// Tamaño base del documento (sin zoom)
 let anchoBaseActual = 0;
 let altoBaseActual = 0;
+
+// ============================================
+// DETECCIÓN DE DISPOSITIVO
+// ============================================
+function esMovil() {
+    return /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent) 
+        || window.innerWidth <= 768;
+}
+
+function esPantallaRetina() {
+    return (window.devicePixelRatio || 1) >= 2;
+}
 
 // ============================================
 // CARGAR LISTA DE PDFs
@@ -76,7 +87,7 @@ function cargarGaleria() {
             </div>
             <div class="tarjeta-info">
                 <h3>${pdf.titulo}</h3>
-                <div class="categoria">Documento PDF</div>
+                <div class="categoria">Matriz IPERC</div>
             </div>
         `;
         tarjeta.onclick = () => abrirVisor(index);
@@ -147,7 +158,7 @@ async function abrirVisor(index) {
 }
 
 // ============================================
-// MOSTRAR PÁGINA
+// MOSTRAR PÁGINA (RENDERIZADO A ALTA RESOLUCIÓN)
 // ============================================
 async function mostrarPagina(numeroPagina) {
     if (!pdfDocActual) return;
@@ -165,7 +176,7 @@ async function mostrarPagina(numeroPagina) {
         const viewportBase = page.getViewport({ scale: 1 });
         const ratio = viewportBase.width / viewportBase.height;
         
-        // Espacio disponible (descontando padding)
+        // ===== ESPACIO DISPONIBLE =====
         const padding = window.innerWidth <= 768 ? 100 : 140;
         const anchoDisponible = wrapper.clientWidth - padding;
         const altoDisponible = wrapper.clientHeight - 40;
@@ -179,21 +190,46 @@ async function mostrarPagina(numeroPagina) {
             altoBaseActual = anchoBaseActual / ratio;
         }
         
-        // Renderizar a alta resolución
-        const dpr = window.devicePixelRatio || 1;
-        const factorCalidad = Math.min(Math.max(dpr, 2), 3);
-        const escalaRender = (anchoBaseActual / viewportBase.width) * factorCalidad;
+        // ============================================================
+        // CLAVE: FACTOR DE CALIDAD ADAPTATIVO
+        // ============================================================
+        // En móviles, renderizamos a 4x para que al ampliar se vea nítido
+        // En PC con pantalla normal, 2x es suficiente
+        // En PC con pantalla retina, 3x
         
+        const dpr = window.devicePixelRatio || 1;
+        let factorCalidad;
+        
+        if (esMovil()) {
+            // Móvil: máxima calidad para compensar la pantalla pequeña
+            factorCalidad = Math.max(dpr, 4);
+        } else if (esPantallaRetina()) {
+            // PC/tablet con pantalla retina
+            factorCalidad = Math.max(dpr, 3);
+        } else {
+            // PC normal
+            factorCalidad = Math.max(dpr, 2);
+        }
+        
+        // Limitar para no consumir demasiada memoria (evitar crashes)
+        factorCalidad = Math.min(factorCalidad, 5);
+        
+        const escalaRender = (anchoBaseActual / viewportBase.width) * factorCalidad;
         const viewportRender = page.getViewport({ scale: escalaRender });
         
+        // ===== CREAR CANVAS =====
         const canvas = document.createElement('canvas');
         canvas.width = viewportRender.width;
         canvas.height = viewportRender.height;
         canvas.style.display = 'block';
         
-        const context = canvas.getContext('2d');
+        const context = canvas.getContext('2d', { alpha: false });
         context.imageSmoothingEnabled = true;
         context.imageSmoothingQuality = 'high';
+        
+        // Fondo blanco para evitar transparencias
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
         
         await page.render({
             canvasContext: context,
@@ -245,7 +281,7 @@ function aplicarTamañoVisual() {
     container.style.width = anchoVisual + 'px';
     container.style.height = altoVisual + 'px';
     
-    // 🔑 CLAVE: El viewer debe ser AL MENOS del tamaño del wrapper para permitir centrado,
+    // El viewer debe ser AL MENOS del tamaño del wrapper para centrado,
     // pero si el canvas es más grande, debe crecer para permitir el scroll.
     const anchoViewer = Math.max(anchoVisual, wrapper.clientWidth);
     const altoViewer = Math.max(altoVisual, wrapper.clientHeight);
@@ -275,12 +311,9 @@ function actualizarComportamiento() {
 // ============================================
 function centrarDocumento() {
     const wrapper = document.getElementById('pdf-wrapper');
-    const viewer = document.getElementById('pdf-viewer');
-    if (!wrapper || !viewer) return;
+    if (!wrapper) return;
     
-    // Centrar horizontalmente
     const scrollX = (wrapper.scrollWidth - wrapper.clientWidth) / 2;
-    // Centrar verticalmente
     const scrollY = (wrapper.scrollHeight - wrapper.clientHeight) / 2;
     
     wrapper.scrollLeft = Math.max(0, scrollX);
@@ -527,7 +560,30 @@ function configurarArrastre() {
     wrapper.addEventListener('touchend', () => { arrastrando = false; });
     wrapper.addEventListener('touchcancel', () => { arrastrando = false; });
     
-    // ===== DOBLE CLIC =====
+    // ===== DOBLE CLIC / DOBLE TAP =====
+    let ultimoTap = 0;
+    wrapper.addEventListener('touchend', (e) => {
+        const ahora = Date.now();
+        if (ahora - ultimoTap < 300) {
+            // Doble tap
+            if (zoomActual > 1) {
+                zoomReset();
+            } else {
+                zoomActual = 2;
+                actualizarZoom();
+                aplicarTamañoVisual();
+                actualizarComportamiento();
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        centrarDocumento();
+                    });
+                });
+            }
+            e.preventDefault();
+        }
+        ultimoTap = ahora;
+    });
+    
     wrapper.addEventListener('dblclick', (e) => {
         if (e.target.closest('button')) return;
         if (zoomActual > 1) {
