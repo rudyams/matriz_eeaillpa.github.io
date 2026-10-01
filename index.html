@@ -45,7 +45,15 @@
             </div>
         </div>
         
-        <div class="pdf-wrapper">
+        <!-- BARRA DE ZOOM -->
+        <div class="zoom-bar">
+            <button class="zoom-btn" onclick="zoomOut()" title="Reducir">−</button>
+            <span id="zoom-nivel" class="zoom-nivel">100%</span>
+            <button class="zoom-btn" onclick="zoomIn()" title="Ampliar">+</button>
+            <button class="zoom-btn zoom-reset" onclick="zoomReset()" title="Ajustar a pantalla">⤢</button>
+        </div>
+
+        <div class="pdf-wrapper" id="pdf-wrapper">
             <button class="nav-btn nav-prev" onclick="paginaAnterior()" id="btn-prev">‹</button>
             <div id="pdf-viewer" class="pdf-viewer">
                 <div id="pdf-page-container" class="pdf-page-container"></div>
@@ -60,10 +68,10 @@
                 </div>
             </div>
             <div class="controles-botones">
-                <button class="btn-control" onclick="paginaAnterior()">
+                <button class="btn-control" onclick="paginaAnterior()" id="btn-ant">
                     <span>←</span> Anterior
                 </button>
-                <button class="btn-control" onclick="paginaSiguiente()">
+                <button class="btn-control" onclick="paginaSiguiente()" id="btn-sig">
                     Siguiente <span>→</span>
                 </button>
             </div>
