@@ -204,7 +204,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 14px 24px;
+    padding: 12px 20px;
     background: rgba(0,0,0,0.4);
     border-bottom: 1px solid rgba(255,255,255,0.08);
     color: white;
@@ -248,6 +248,60 @@ body {
     font-variant-numeric: tabular-nums;
 }
 
+/* ============ ZOOM BAR ============ */
+.zoom-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 15px;
+    background: rgba(0,0,0,0.5);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    flex-shrink: 0;
+}
+
+.zoom-btn {
+    background: rgba(255,255,255,0.1);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.15);
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1.2em;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    font-family: Arial, sans-serif;
+    line-height: 1;
+}
+
+.zoom-btn:hover {
+    background: var(--color-acento);
+    border-color: var(--color-acento);
+    transform: scale(1.05);
+}
+
+.zoom-btn:active {
+    transform: scale(0.95);
+}
+
+.zoom-reset {
+    font-size: 1.1em;
+    margin-left: 4px;
+}
+
+.zoom-nivel {
+    color: white;
+    font-size: 0.85em;
+    min-width: 55px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+}
+
 /* ============ PDF VIEWER ============ */
 .pdf-wrapper {
     flex: 1;
@@ -255,25 +309,31 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
-    padding: 20px 80px;
+    overflow: auto;
+    padding: 15px 70px;
+    background: #1a202c;
 }
 
 .pdf-viewer {
-    width: 100%;
-    height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
     position: relative;
+    min-width: 100%;
+    min-height: 100%;
 }
 
 .pdf-page-container {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: opacity 0.3s ease, transform 0.3s ease;
+    transition: opacity 0.3s ease;
     opacity: 1;
+    cursor: grab;
+}
+
+.pdf-page-container.arrastrando {
+    cursor: grabbing;
 }
 
 .pdf-page-container canvas {
@@ -281,8 +341,6 @@ body {
     box-shadow: 0 10px 40px rgba(0,0,0,0.6);
     border-radius: 4px;
     background: white;
-    max-width: 100%;
-    max-height: 100%;
 }
 
 /* ============ NAV BUTTONS ============ */
@@ -293,9 +351,9 @@ body {
     width: 52px;
     height: 52px;
     border-radius: 50%;
-    background: rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.15);
     backdrop-filter: blur(10px);
-    border: 1px solid rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.25);
     color: white;
     font-size: 1.8em;
     cursor: pointer;
@@ -321,13 +379,13 @@ body {
 }
 
 .nav-btn:disabled:hover {
-    background: rgba(255,255,255,0.1);
-    border-color: rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.15);
+    border-color: rgba(255,255,255,0.25);
     transform: translateY(-50%);
 }
 
-.nav-prev { left: 15px; }
-.nav-next { right: 15px; }
+.nav-prev { left: 10px; }
+.nav-next { right: 10px; }
 
 /* ============ CONTROLES ============ */
 .controles {
@@ -335,7 +393,7 @@ body {
     align-items: center;
     justify-content: center;
     gap: 30px;
-    padding: 16px 30px;
+    padding: 14px 30px;
     background: rgba(0,0,0,0.4);
     border-top: 1px solid rgba(255,255,255,0.08);
     flex-shrink: 0;
@@ -440,6 +498,9 @@ body {
     
     .visor-header h2 { display: none; }
     .visor-header { padding: 10px 14px; }
+    
+    .zoom-bar { padding: 6px 10px; }
+    .zoom-btn { width: 36px; height: 36px; font-size: 1.1em; }
     
     .pdf-wrapper { padding: 10px 50px; }
     .nav-btn { width: 42px; height: 42px; font-size: 1.4em; }
