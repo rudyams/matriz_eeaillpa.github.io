@@ -13,13 +13,11 @@ let totalPaginas = 1;
 let paginaActual = 1;
 let bloqueado = false;
 
-// Zoom
 let zoomActual = 1;
 let zoomMin = 1;
 let zoomMax = 4;
 let zoomPaso = 0.25;
 
-// Arrastre
 let arrastrando = false;
 let startX = 0, startY = 0;
 let scrollStartX = 0, scrollStartY = 0;
@@ -29,9 +27,7 @@ let scrollStartX = 0, scrollStartY = 0;
 // ============================================
 async function cargarListaPDFs() {
     try {
-        const respuesta = await fetch('lista.json?v=' + Date.now(), {
-            cache: 'no-store'
-        });
+        const respuesta = await fetch('lista.json?v=' + Date.now(), { cache: 'no-store' });
         if (!respuesta.ok) throw new Error('No se encontró lista.json');
         listaPDFs = await respuesta.json();
         
@@ -157,7 +153,7 @@ async function mostrarPagina(numeroPagina) {
     
     container.style.opacity = '0';
     
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise(resolve => setTimeout(resolve, 100));
 
     try {
         const page = await pdfDocActual.getPage(numeroPagina);
@@ -165,13 +161,14 @@ async function mostrarPagina(numeroPagina) {
         const viewportBase = page.getViewport({ scale: 1 });
         const ratio = viewportBase.width / viewportBase.height;
         
-        // Espacio disponible (dejamos un pequeño margen)
-        const anchoDisponible = wrapper.clientWidth - 100;
-        const altoDisponible = wrapper.clientHeight - 30;
+        // Espacio disponible (descontando padding del wrapper)
+        const padding = window.innerWidth <= 768 ? 100 : 140;
+        const anchoDisponible = wrapper.clientWidth - padding;
+        const altoDisponible = wrapper.clientHeight - 40;
         
         let anchoBase, altoBase;
         
-        // Calcular tamaño base para que quepa completo
+        // Ajustar para que quepa completo (sin zoom)
         if (anchoDisponible / altoDisponible > ratio) {
             altoBase = altoDisponible;
             anchoBase = altoBase * ratio;
@@ -180,11 +177,11 @@ async function mostrarPagina(numeroPagina) {
             altoBase = anchoBase / ratio;
         }
         
-        // Dimensiones visuales finales (con zoom)
-        const anchoVisual = anchoBase * zoomActual;
-        const altoVisual = altoBase * zoomActual;
+        // Dimensiones visuales con zoom aplicado
+        const anchoVisual = Math.round(anchoBase * zoomActual);
+        const altoVisual = Math.round(altoBase * zoomActual);
         
-        // Renderizar a alta resolución
+        // Renderizar a alta resolución (sin aplicar zoom al canvas interno)
         const dpr = window.devicePixelRatio || 1;
         const factorCalidad = Math.min(Math.max(dpr, 2), 3);
         const escalaRender = (anchoBase / viewportBase.width) * factorCalidad;
@@ -212,20 +209,18 @@ async function mostrarPagina(numeroPagina) {
         container.style.opacity = '1';
         
         // ========== ACTUALIZAR COMPORTAMIENTO DE SCROLL ==========
-        actualizarComportamientoScroll();
+        if (zoomActual > 1) {
+            wrapper.classList.add('zoom-activo');
+        } else {
+            wrapper.classList.remove('zoom-activo');
+        }
         
-        // ========== CENTRAR DOCUMENTO ==========
-        // Esperamos un momento para que el navegador calcule las dimensiones
+        // ========== CENTRAR DOCUMENTO DESPUÉS DEL RENDERIZADO ==========
+        // Esperamos 2 frames para asegurar que el navegador ya calculó el layout
         requestAnimationFrame(() => {
-            if (zoomActual <= 1) {
-                // Al 100%, centrar
-                wrapper.scrollLeft = (wrapper.scrollWidth - wrapper.clientWidth) / 2;
-                wrapper.scrollTop = (wrapper.scrollHeight - wrapper.clientHeight) / 2;
-            } else {
-                // Con zoom, centrar también
-                wrapper.scrollLeft = (wrapper.scrollWidth - wrapper.clientWidth) / 2;
-                wrapper.scrollTop = (wrapper.scrollHeight - wrapper.clientHeight) / 2;
-            }
+            requestAnimationFrame(() => {
+                centrarDocumento();
+            });
         });
         
     } catch (error) {
@@ -235,28 +230,17 @@ async function mostrarPagina(numeroPagina) {
 }
 
 // ============================================
-// COMPORTAMIENTO DEL SCROLL SEGÚN EL ZOOM
+// CENTRAR DOCUMENTO EN EL WRAPPER
 // ============================================
-function actualizarComportamientoScroll() {
+function centrarDocumento() {
     const wrapper = document.getElementById('pdf-wrapper');
     if (!wrapper) return;
     
-    if (zoomActual > 1) {
-        // Con zoom: permitir scroll y arrastre
-        wrapper.style.overflow = 'auto';
-        wrapper.style.cursor = 'grab';
-        wrapper.style.alignItems = 'flex-start';
-        wrapper.style.justifyContent = 'flex-start';
-    } else {
-        // Al 100%: centrar sin scroll
-        wrapper.style.overflow = 'hidden';
-        wrapper.style.cursor = 'default';
-        wrapper.style.alignItems = 'center';
-        wrapper.style.justifyContent = 'center';
-        // Resetear scroll
-        wrapper.scrollLeft = 0;
-        wrapper.scrollTop = 0;
-    }
+    const scrollX = (wrapper.scrollWidth - wrapper.clientWidth) / 2;
+    const scrollY = (wrapper.scrollHeight - wrapper.clientHeight) / 2;
+    
+    wrapper.scrollLeft = Math.max(0, scrollX);
+    wrapper.scrollTop = Math.max(0, scrollY);
 }
 
 // ============================================
@@ -291,22 +275,69 @@ async function paginaSiguiente() {
 // ============================================
 function zoomIn() {
     if (zoomActual >= zoomMax) return;
+    const valorAnterior = zoomActual;
     zoomActual = Math.min(zoomActual + zoomPaso, zoomMax);
-    mostrarPagina(paginaActual);
     actualizarZoom();
+    aplicarZoomSinReRender(valorAnterior);
 }
 
 function zoomOut() {
     if (zoomActual <= zoomMin) return;
+    const valorAnterior = zoomActual;
     zoomActual = Math.max(zoomActual - zoomPaso, zoomMin);
-    mostrarPagina(paginaActual);
     actualizarZoom();
+    aplicarZoomSinReRender(valorAnterior);
 }
 
 function zoomReset() {
+    const valorAnterior = zoomActual;
     zoomActual = 1;
-    mostrarPagina(paginaActual);
     actualizarZoom();
+    aplicarZoomSinReRender(valorAnterior);
+}
+
+// Aplica el zoom solo cambiando el tamaño del canvas (sin re-renderizar)
+function aplicarZoomSinReRender(valorAnterior) {
+    const wrapper = document.getElementById('pdf-wrapper');
+    const canvas = document.querySelector('#pdf-page-container canvas');
+    
+    if (!canvas) {
+        // Si no hay canvas, re-renderizar
+        mostrarPagina(paginaActual);
+        return;
+    }
+    
+    // Guardar posición relativa del scroll
+    const relScrollX = wrapper.scrollLeft / Math.max(1, wrapper.scrollWidth);
+    const relScrollY = wrapper.scrollTop / Math.max(1, wrapper.scrollHeight);
+    
+    // Calcular nuevas dimensiones
+    const anchoActual = parseFloat(canvas.style.width);
+    const altoActual = parseFloat(canvas.style.height);
+    const factor = zoomActual / valorAnterior;
+    
+    canvas.style.width = Math.round(anchoActual * factor) + 'px';
+    canvas.style.height = Math.round(altoActual * factor) + 'px';
+    
+    // Actualizar comportamiento
+    if (zoomActual > 1) {
+        wrapper.classList.add('zoom-activo');
+    } else {
+        wrapper.classList.remove('zoom-activo');
+    }
+    
+    // Ajustar scroll
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            if (zoomActual === 1) {
+                centrarDocumento();
+            } else {
+                // Mantener posición relativa
+                wrapper.scrollLeft = relScrollX * wrapper.scrollWidth - wrapper.clientWidth / 2;
+                wrapper.scrollTop = relScrollY * wrapper.scrollHeight - wrapper.clientHeight / 2;
+            }
+        });
+    });
 }
 
 function actualizarZoom() {
@@ -364,6 +395,13 @@ async function cerrarVisor() {
     const container = document.getElementById('pdf-page-container');
     container.innerHTML = '';
     container.style.opacity = '1';
+    
+    const wrapper = document.getElementById('pdf-wrapper');
+    if (wrapper) {
+        wrapper.classList.remove('zoom-activo');
+        wrapper.scrollLeft = 0;
+        wrapper.scrollTop = 0;
+    }
 }
 
 // ============================================
@@ -390,7 +428,6 @@ function configurarArrastre() {
     // ===== MOUSE =====
     wrapper.addEventListener('mousedown', (e) => {
         if (zoomActual <= 1) return;
-        // Ignorar clics en botones
         if (e.target.closest('button')) return;
         
         arrastrando = true;
@@ -398,7 +435,7 @@ function configurarArrastre() {
         startY = e.clientY;
         scrollStartX = wrapper.scrollLeft;
         scrollStartY = wrapper.scrollTop;
-        wrapper.style.cursor = 'grabbing';
+        wrapper.classList.add('arrastrando');
         e.preventDefault();
     });
     
@@ -414,7 +451,7 @@ function configurarArrastre() {
     document.addEventListener('mouseup', () => {
         if (arrastrando) {
             arrastrando = false;
-            wrapper.style.cursor = zoomActual > 1 ? 'grab' : 'default';
+            wrapper.classList.remove('arrastrando');
         }
     });
     
@@ -428,108 +465,4 @@ function configurarArrastre() {
         startX = e.touches[0].clientX;
         startY = e.touches[0].clientY;
         scrollStartX = wrapper.scrollLeft;
-        scrollStartY = wrapper.scrollTop;
-    }, { passive: true });
-    
-    wrapper.addEventListener('touchmove', (e) => {
-        if (!arrastrando || e.touches.length !== 1) return;
-        const walkX = e.touches[0].clientX - startX;
-        const walkY = e.touches[0].clientY - startY;
-        wrapper.scrollLeft = scrollStartX - walkX;
-        wrapper.scrollTop = scrollStartY - walkY;
-    }, { passive: true });
-    
-    wrapper.addEventListener('touchend', () => {
-        arrastrando = false;
-    });
-    
-    wrapper.addEventListener('touchcancel', () => {
-        arrastrando = false;
-    });
-    
-    // Cambiar el cursor al pasar sobre el wrapper
-    wrapper.addEventListener('mouseenter', () => {
-        if (zoomActual > 1) wrapper.style.cursor = 'grab';
-    });
-}
-
-// ============================================
-// DOBLE CLIC PARA ZOOM
-// ============================================
-function configurarDobleClic() {
-    const container = document.getElementById('pdf-page-container');
-    if (!container || container.dataset.dobleClic === '1') return;
-    container.dataset.dobleClic = '1';
-    
-    container.addEventListener('dblclick', () => {
-        if (zoomActual > 1) {
-            zoomReset();
-        } else {
-            zoomActual = 2;
-            mostrarPagina(paginaActual);
-            actualizarZoom();
-        }
-    });
-}
-
-// ============================================
-// TECLADO
-// ============================================
-document.addEventListener('keydown', (e) => {
-    if (document.getElementById('visor').classList.contains('oculto')) return;
-    if (e.key === 'ArrowLeft') paginaAnterior();
-    if (e.key === 'ArrowRight') paginaSiguiente();
-    if (e.key === '+' || e.key === '=') zoomIn();
-    if (e.key === '-') zoomOut();
-    if (e.key === 'Escape') cerrarVisor();
-    if (e.key === '0') zoomReset();
-});
-
-// ============================================
-// RESIZE
-// ============================================
-let resizeTimeout;
-window.addEventListener('resize', () => {
-    clearTimeout(resizeTimeout);
-    resizeTimeout = setTimeout(() => {
-        if (pdfDocActual && !document.getElementById('visor').classList.contains('oculto')) {
-            mostrarPagina(paginaActual);
-        }
-    }, 300);
-});
-
-// ============================================
-// INICIAR
-// ============================================
-document.addEventListener('DOMContentLoaded', async () => {
-    await cargarListaPDFs();
-    
-    // Configurar eventos (se ejecutan una sola vez)
-    configurarArrastre();
-    configurarDobleClic();
-    
-    // Detectar ?doc=XX en la URL
-    const docParam = obtenerDocDesdeURL();
-    if (docParam) {
-        const index = listaPDFs.findIndex((pdf, i) => {
-            const num = String(i + 1).padStart(2, '0');
-            return num === docParam || pdf.archivo.toLowerCase().includes(docParam.toLowerCase());
-        });
-        
-        if (index !== -1) {
-            setTimeout(() => abrirVisor(index), 500);
-        }
-    }
-});
-
-// Escuchar cambios en el hash
-window.addEventListener('hashchange', () => {
-    const docParam = obtenerDocDesdeURL();
-    if (docParam) {
-        const index = listaPDFs.findIndex((pdf, i) => {
-            const num = String(i + 1).padStart(2, '0');
-            return num === docParam;
-        });
-        if (index !== -1) abrirVisor(index);
-    }
-});
+        scrollStartY
