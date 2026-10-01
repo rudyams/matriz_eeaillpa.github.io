@@ -14,16 +14,13 @@
     --color-texto-suave: #718096;
 }
 
-html, body {
-    height: 100%;
-    overflow: hidden;
-}
-
 body {
     font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
     background: var(--color-fondo);
     color: var(--color-texto);
     -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    height: 100vh;
 }
 
 /* ============ HEADER ============ */
@@ -65,7 +62,6 @@ body {
 .logo-area h1 {
     font-size: 1.3em;
     font-weight: 600;
-    letter-spacing: -0.3px;
 }
 
 .logo-area p {
@@ -119,7 +115,7 @@ body {
     border-radius: 14px;
     overflow: hidden;
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.3s;
     box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     border: 1px solid #e2e8f0;
     position: relative;
@@ -276,12 +272,12 @@ body {
     transition: all 0.2s;
     font-family: Arial, sans-serif;
     line-height: 1;
+    user-select: none;
 }
 
 .zoom-btn:hover {
     background: var(--color-acento);
     border-color: var(--color-acento);
-    transform: scale(1.05);
 }
 
 .zoom-btn:active {
@@ -302,38 +298,39 @@ body {
     font-weight: 500;
 }
 
-/* ============ PDF VIEWER ============ */
+/* ============ PDF WRAPPER (SCROLL) ============ */
 .pdf-wrapper {
     flex: 1;
     position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     overflow: auto;
-    padding: 15px 70px;
     background: #1a202c;
+    display: block;
+    padding: 20px 70px;
+    -webkit-overflow-scrolling: touch;
+    min-height: 0;
 }
 
+.pdf-wrapper.zoom-activo {
+    cursor: grab;
+}
+
+.pdf-wrapper.zoom-activo.arrastrando {
+    cursor: grabbing;
+}
+
+/* ============ PDF VIEWER ============ */
 .pdf-viewer {
     display: flex;
     align-items: center;
     justify-content: center;
-    position: relative;
     min-width: 100%;
     min-height: 100%;
 }
 
 .pdf-page-container {
-    display: flex;
-    align-items: center;
-    justify-content: center;
     transition: opacity 0.3s ease;
     opacity: 1;
-    cursor: grab;
-}
-
-.pdf-page-container.arrastrando {
-    cursor: grabbing;
+    display: inline-block;
 }
 
 .pdf-page-container canvas {
@@ -341,11 +338,13 @@ body {
     box-shadow: 0 10px 40px rgba(0,0,0,0.6);
     border-radius: 4px;
     background: white;
+    pointer-events: none;
+    user-select: none;
 }
 
 /* ============ NAV BUTTONS ============ */
 .nav-btn {
-    position: absolute;
+    position: fixed;
     top: 50%;
     transform: translateY(-50%);
     width: 52px;
@@ -361,7 +360,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 10;
+    z-index: 100;
     font-family: Arial, sans-serif;
     line-height: 1;
     padding-bottom: 4px;
@@ -384,8 +383,8 @@ body {
     transform: translateY(-50%);
 }
 
-.nav-prev { left: 10px; }
-.nav-next { right: 10px; }
+.nav-prev { left: 15px; }
+.nav-next { right: 15px; }
 
 /* ============ CONTROLES ============ */
 .controles {
@@ -416,7 +415,7 @@ body {
     background: linear-gradient(90deg, var(--color-acento), #f6ad55);
     border-radius: 3px;
     width: 0%;
-    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: width 0.4s;
 }
 
 .controles-botones {
@@ -463,6 +462,7 @@ body {
     align-items: center;
     gap: 15px;
     color: white;
+    padding: 40px;
 }
 
 .spinner {
