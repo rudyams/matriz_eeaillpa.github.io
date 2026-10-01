@@ -278,9 +278,19 @@ async function cerrarVisor() {
 }
 
 // ============================================
-// DETECTAR ?doc=XX EN LA URL
+// DETECTAR ?doc=XX EN LA URL (VERSIÓN MEJORADA)
 // ============================================
 function obtenerDocDesdeURL() {
+    // 1. Intentar leer desde el hash (#), que es lo más seguro
+    const hash = window.location.hash;
+    if (hash && hash.includes('doc=')) {
+        const match = hash.match(/doc=([^&]+)/);
+        if (match && match[1]) {
+            return decodeURIComponent(match[1]);
+        }
+    }
+    
+    // 2. Si no, intentar leer desde los parámetros de búsqueda normales (?)
     const params = new URLSearchParams(window.location.search);
     return params.get('doc');
 }
@@ -309,21 +319,38 @@ window.addEventListener('resize', () => {
 });
 
 // ============================================
-// INICIAR
+// INICIAR (CON SOPORTE PARA ?doc=XX)
 // ============================================
 document.addEventListener('DOMContentLoaded', async () => {
     await cargarListaPDFs();
     
     // Después de cargar la galería, verificar si hay un doc en la URL
     const docParam = obtenerDocDesdeURL();
+    
     if (docParam) {
+        // Buscar el documento por número (01, 02...) o por nombre de archivo
         const index = listaPDFs.findIndex((pdf, i) => {
             const num = String(i + 1).padStart(2, '0');
-            return num === docParam || pdf.archivo.includes(docParam);
+            return num === docParam || pdf.archivo.toLowerCase().includes(docParam.toLowerCase());
         });
         
         if (index !== -1) {
-            setTimeout(() => abrirVisor(index), 400);
+            // Esperar un momento para que la galería se renderice, luego abrir
+            setTimeout(() => abrirVisor(index), 500);
+        }
+    }
+});
+
+// También escuchar cambios en el hash (por si acaso)
+window.addEventListener('hashchange', () => {
+    const docParam = obtenerDocDesdeURL();
+    if (docParam) {
+        const index = listaPDFs.findIndex((pdf, i) => {
+            const num = String(i + 1).padStart(2, '0');
+            return num === docParam;
+        });
+        if (index !== -1) {
+            abrirVisor(index);
         }
     }
 });
