@@ -13,8 +13,19 @@ let totalPaginas = 1;
 let paginaActual = 1;
 let bloqueado = false;
 
+// Zoom
+let zoomActual = 1;        // 1 = ajustado a pantalla
+let zoomMin = 1;
+let zoomMax = 4;
+let zoomPaso = 0.25;
+
+// Arrastre
+let arrastrando = false;
+let startX = 0, startY = 0;
+let scrollStartX = 0, scrollStartY = 0;
+
 // ============================================
-// CARGAR LISTA DE PDFs (SIN CACHÉ)
+// CARGAR LISTA DE PDFs
 // ============================================
 async function cargarListaPDFs() {
     try {
@@ -82,16 +93,14 @@ async function abrirVisor(index) {
     
     const pdf = listaPDFs[index];
     
-    // Limpieza total antes de abrir
     if (pdfDocActual) {
-        try {
-            await pdfDocActual.destroy();
-        } catch(e) { console.warn('Error destruyendo PDF anterior:', e); }
+        try { await pdfDocActual.destroy(); } catch(e) {}
         pdfDocActual = null;
     }
     
     totalPaginas = 1;
     paginaActual = 1;
+    zoomActual = 1;
     
     document.querySelector('.galeria-container').style.display = 'none';
     document.querySelector('.header').style.display = 'none';
@@ -120,6 +129,7 @@ async function abrirVisor(index) {
         await mostrarPagina(paginaActual);
         actualizarIndicadores();
         actualizarBotones();
+        actualizarZoom();
 
     } catch (error) {
         console.error('Error al cargar PDF:', error);
@@ -129,9 +139,6 @@ async function abrirVisor(index) {
                 <p style="opacity:0.7; margin-top:10px;">
                     Ruta: <strong>${pdf.archivo}</strong>
                 </p>
-                <p style="opacity:0.5; margin-top:5px; font-size:0.85em;">
-                    Error: ${error.message || 'Desconocido'}
-                </p>
             </div>
         `;
     } finally {
@@ -140,17 +147,15 @@ async function abrirVisor(index) {
 }
 
 // ============================================
-// MOSTRAR PÁGINA
+// MOSTRAR PÁGINA (ALTA RESOLUCIÓN)
 // ============================================
 async function mostrarPagina(numeroPagina) {
     if (!pdfDocActual) return;
 
     const container = document.getElementById('pdf-page-container');
-    
-    container.style.transition = 'opacity 0.2s ease';
     container.style.opacity = '0';
     
-    await new Promise(resolve => setTimeout(resolve, 180));
+    await new Promise(resolve => setTimeout(resolve, 150));
 
     try {
         const page = await pdfDocActual.getPage(numeroPagina);
@@ -158,8 +163,8 @@ async function mostrarPagina(numeroPagina) {
         const viewportBase = page.getViewport({ scale: 1 });
         const ratio = viewportBase.width / viewportBase.height;
         
-        const wrapper = document.querySelector('.pdf-wrapper');
-        const anchoDisponible = wrapper.clientWidth - 30;
+        const wrapper = document.getElementById('pdf-wrapper');
+        const anchoDisponible = wrapper.clientWidth - 100;
         const altoDisponible = wrapper.clientHeight - 30;
         
         let anchoFinal, altoFinal;
@@ -172,29 +177,46 @@ async function mostrarPagina(numeroPagina) {
             altoFinal = anchoFinal / ratio;
         }
         
-        const escala = Math.min(anchoFinal / viewportBase.width, 3);
-        const viewportRender = page.getViewport({ scale: escala * 2 });
+        // ========== CLAVE: ALTA RESOLUCIÓN ==========
+        // Usar devicePixelRatio para pantallas retina (celulares, tablets, monitores 4K)
+        const dpr = window.devicePixelRatio || 1;
+        
+        // Factor de calidad: renderizar al menos a 2x, y hasta 3x si la pantalla lo soporta
+        const factorCalidad = Math.min(Math.max(dpr, 2), 3);
+        
+        // Escala real para renderizar el canvas a alta resolución
+        const escalaRender = (anchoFinal / viewportBase.width) * factorCalidad * zoomActual;
+        
+        const viewportRender = page.getViewport({ scale: escalaRender });
         
         const canvas = document.createElement('canvas');
         canvas.width = viewportRender.width;
         canvas.height = viewportRender.height;
-        canvas.style.width = anchoFinal + 'px';
-        canvas.style.height = altoFinal + 'px';
+        
+        // Tamaño visual = tamaño lógico * zoom
+        const anchoVisual = anchoFinal * zoomActual;
+        const altoVisual = altoFinal * zoomActual;
+        canvas.style.width = anchoVisual + 'px';
+        canvas.style.height = altoVisual + 'px';
         canvas.style.display = 'block';
         
         const context = canvas.getContext('2d');
+        context.imageSmoothingEnabled = true;
+        context.imageSmoothingQuality = 'high';
+        
         await page.render({
             canvasContext: context,
-            viewport: viewportRender
+            viewport: viewportRender,
+            transform: [factorCalidad, 0, 0, factorCalidad, 0, 0]
         }).promise;
 
         container.innerHTML = '';
         container.appendChild(canvas);
         
-        container.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
         container.style.opacity = '1';
         
-        void container.offsetWidth;
+        // Actualizar dimensiones de scroll
+        actualizarScroll();
         
     } catch (error) {
         console.error('Error al renderizar página:', error);
@@ -230,6 +252,56 @@ async function paginaSiguiente() {
 }
 
 // ============================================
+// ZOOM
+// ============================================
+function zoomIn() {
+    if (zoomActual >= zoomMax) return;
+    zoomActual = Math.min(zoomActual + zoomPaso, zoomMax);
+    mostrarPagina(paginaActual);
+    actualizarZoom();
+}
+
+function zoomOut() {
+    if (zoomActual <= zoomMin) return;
+    zoomActual = Math.max(zoomActual - zoomPaso, zoomMin);
+    mostrarPagina(paginaActual);
+    actualizarZoom();
+}
+
+function zoomReset() {
+    zoomActual = 1;
+    mostrarPagina(paginaActual);
+    actualizarZoom();
+}
+
+function actualizarZoom() {
+    const nivel = document.getElementById('zoom-nivel');
+    if (nivel) {
+        nivel.textContent = Math.round(zoomActual * 100) + '%';
+    }
+}
+
+// ============================================
+// ARRASTRE (cuando hay zoom)
+// ============================================
+function actualizarScroll() {
+    const wrapper = document.getElementById('pdf-wrapper');
+    if (!wrapper) return;
+    
+    if (zoomActual > 1) {
+        wrapper.style.cursor = 'grab';
+        wrapper.style.overflow = 'auto';
+        wrapper.style.alignItems = 'flex-start';
+        wrapper.style.justifyContent = 'flex-start';
+    } else {
+        wrapper.style.cursor = 'default';
+        wrapper.style.overflow = 'hidden';
+        wrapper.style.alignItems = 'center';
+        wrapper.style.justifyContent = 'center';
+    }
+}
+
+// ============================================
 // ACTUALIZAR INDICADORES
 // ============================================
 function actualizarIndicadores() {
@@ -243,13 +315,16 @@ function actualizarIndicadores() {
 function actualizarBotones() {
     const btnPrev = document.getElementById('btn-prev');
     const btnNext = document.getElementById('btn-next');
+    const btnAnt = document.getElementById('btn-ant');
+    const btnSig = document.getElementById('btn-sig');
     
-    if (btnPrev) btnPrev.disabled = (paginaActual <= 1);
-    if (btnNext) btnNext.disabled = (paginaActual >= totalPaginas);
+    const esPrimera = paginaActual <= 1;
+    const esUltima = paginaActual >= totalPaginas;
     
-    const botonesInferiores = document.querySelectorAll('.btn-control');
-    if (botonesInferiores[0]) botonesInferiores[0].disabled = (paginaActual <= 1);
-    if (botonesInferiores[1]) botonesInferiores[1].disabled = (paginaActual >= totalPaginas);
+    if (btnPrev) btnPrev.disabled = esPrimera;
+    if (btnAnt) btnAnt.disabled = esPrimera;
+    if (btnNext) btnNext.disabled = esUltima;
+    if (btnSig) btnSig.disabled = esUltima;
 }
 
 // ============================================
@@ -257,14 +332,13 @@ function actualizarBotones() {
 // ============================================
 async function cerrarVisor() {
     if (pdfDocActual) {
-        try {
-            await pdfDocActual.destroy();
-        } catch(e) { console.warn('Error al destruir:', e); }
+        try { await pdfDocActual.destroy(); } catch(e) {}
         pdfDocActual = null;
     }
     
     paginaActual = 1;
     totalPaginas = 1;
+    zoomActual = 1;
     bloqueado = false;
     
     document.getElementById('visor').classList.add('oculto');
@@ -274,25 +348,97 @@ async function cerrarVisor() {
     const container = document.getElementById('pdf-page-container');
     container.innerHTML = '';
     container.style.opacity = '1';
-    container.style.transform = 'translateX(0)';
 }
 
 // ============================================
-// DETECTAR ?doc=XX EN LA URL (VERSIÓN MEJORADA)
+// DETECTAR ?doc=XX EN LA URL
 // ============================================
 function obtenerDocDesdeURL() {
-    // 1. Intentar leer desde el hash (#), que es lo más seguro
     const hash = window.location.hash;
     if (hash && hash.includes('doc=')) {
         const match = hash.match(/doc=([^&]+)/);
-        if (match && match[1]) {
-            return decodeURIComponent(match[1]);
-        }
+        if (match && match[1]) return decodeURIComponent(match[1]);
     }
-    
-    // 2. Si no, intentar leer desde los parámetros de búsqueda normales (?)
     const params = new URLSearchParams(window.location.search);
     return params.get('doc');
+}
+
+// ============================================
+// EVENTOS DE ARRASTRE
+// ============================================
+function configurarArrastre() {
+    const wrapper = document.getElementById('pdf-wrapper');
+    if (!wrapper) return;
+    
+    wrapper.addEventListener('mousedown', (e) => {
+        if (zoomActual <= 1) return;
+        arrastrando = true;
+        startX = e.pageX;
+        startY = e.pageY;
+        scrollStartX = wrapper.scrollLeft;
+        scrollStartY = wrapper.scrollTop;
+        wrapper.style.cursor = 'grabbing';
+        e.preventDefault();
+    });
+    
+    wrapper.addEventListener('mousemove', (e) => {
+        if (!arrastrando) return;
+        e.preventDefault();
+        const walkX = e.pageX - startX;
+        const walkY = e.pageY - startY;
+        wrapper.scrollLeft = scrollStartX - walkX;
+        wrapper.scrollTop = scrollStartY - walkY;
+    });
+    
+    wrapper.addEventListener('mouseup', () => {
+        arrastrando = false;
+        if (zoomActual > 1) wrapper.style.cursor = 'grab';
+    });
+    
+    wrapper.addEventListener('mouseleave', () => {
+        arrastrando = false;
+        if (zoomActual > 1) wrapper.style.cursor = 'grab';
+    });
+    
+    // Táctil para móvil
+    wrapper.addEventListener('touchstart', (e) => {
+        if (zoomActual <= 1 || e.touches.length !== 1) return;
+        arrastrando = true;
+        startX = e.touches[0].pageX;
+        startY = e.touches[0].pageY;
+        scrollStartX = wrapper.scrollLeft;
+        scrollStartY = wrapper.scrollTop;
+    }, { passive: true });
+    
+    wrapper.addEventListener('touchmove', (e) => {
+        if (!arrastrando || e.touches.length !== 1) return;
+        const walkX = e.touches[0].pageX - startX;
+        const walkY = e.touches[0].pageY - startY;
+        wrapper.scrollLeft = scrollStartX - walkX;
+        wrapper.scrollTop = scrollStartY - walkY;
+    }, { passive: true });
+    
+    wrapper.addEventListener('touchend', () => {
+        arrastrando = false;
+    });
+}
+
+// ============================================
+// DOBLE CLIC PARA ZOOM
+// ============================================
+function configurarDobleClic() {
+    const container = document.getElementById('pdf-page-container');
+    if (!container) return;
+    
+    container.addEventListener('dblclick', () => {
+        if (zoomActual > 1) {
+            zoomReset();
+        } else {
+            zoomActual = 2;
+            mostrarPagina(paginaActual);
+            actualizarZoom();
+        }
+    });
 }
 
 // ============================================
@@ -302,55 +448,14 @@ document.addEventListener('keydown', (e) => {
     if (document.getElementById('visor').classList.contains('oculto')) return;
     if (e.key === 'ArrowLeft') paginaAnterior();
     if (e.key === 'ArrowRight') paginaSiguiente();
+    if (e.key === 'ArrowUp') zoomIn();
+    if (e.key === 'ArrowDown') zoomOut();
     if (e.key === 'Escape') cerrarVisor();
+    if (e.key === '+' || e.key === '=') zoomIn();
+    if (e.key === '-') zoomOut();
 });
 
 // ============================================
 // RESIZE
 // ============================================
-let resizeTimeout;
-window.addEventListener('resize', () => {
-    clearTimeout(resizeTimeout);
-    resizeTimeout = setTimeout(() => {
-        if (pdfDocActual && !document.getElementById('visor').classList.contains('oculto')) {
-            mostrarPagina(paginaActual);
-        }
-    }, 300);
-});
-
-// ============================================
-// INICIAR (CON SOPORTE PARA ?doc=XX)
-// ============================================
-document.addEventListener('DOMContentLoaded', async () => {
-    await cargarListaPDFs();
-    
-    // Después de cargar la galería, verificar si hay un doc en la URL
-    const docParam = obtenerDocDesdeURL();
-    
-    if (docParam) {
-        // Buscar el documento por número (01, 02...) o por nombre de archivo
-        const index = listaPDFs.findIndex((pdf, i) => {
-            const num = String(i + 1).padStart(2, '0');
-            return num === docParam || pdf.archivo.toLowerCase().includes(docParam.toLowerCase());
-        });
-        
-        if (index !== -1) {
-            // Esperar un momento para que la galería se renderice, luego abrir
-            setTimeout(() => abrirVisor(index), 500);
-        }
-    }
-});
-
-// También escuchar cambios en el hash (por si acaso)
-window.addEventListener('hashchange', () => {
-    const docParam = obtenerDocDesdeURL();
-    if (docParam) {
-        const index = listaPDFs.findIndex((pdf, i) => {
-            const num = String(i + 1).padStart(2, '0');
-            return num === docParam;
-        });
-        if (index !== -1) {
-            abrirVisor(index);
-        }
-    }
-});
+let resizeTimeout
