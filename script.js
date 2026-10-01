@@ -465,4 +465,87 @@ function configurarArrastre() {
         startX = e.touches[0].clientX;
         startY = e.touches[0].clientY;
         scrollStartX = wrapper.scrollLeft;
-        scrollStartY
+        scrollStartY = wrapper.scrollTop;
+    }, { passive: true });
+    
+    wrapper.addEventListener('touchmove', (e) => {
+        if (!arrastrando || e.touches.length !== 1) return;
+        const walkX = e.touches[0].clientX - startX;
+        const walkY = e.touches[0].clientY - startY;
+        wrapper.scrollLeft = scrollStartX - walkX;
+        wrapper.scrollTop = scrollStartY - walkY;
+    }, { passive: true });
+    
+    wrapper.addEventListener('touchend', () => { arrastrando = false; });
+    wrapper.addEventListener('touchcancel', () => { arrastrando = false; });
+    
+    // ===== DOBLE CLIC PARA ZOOM =====
+    wrapper.addEventListener('dblclick', (e) => {
+        if (e.target.closest('button')) return;
+        if (zoomActual > 1) {
+            zoomReset();
+        } else {
+            zoomActual = 2;
+            actualizarZoom();
+            aplicarZoomSinReRender(1);
+        }
+    });
+}
+
+// ============================================
+// TECLADO
+// ============================================
+document.addEventListener('keydown', (e) => {
+    if (document.getElementById('visor').classList.contains('oculto')) return;
+    if (e.key === 'ArrowLeft') paginaAnterior();
+    if (e.key === 'ArrowRight') paginaSiguiente();
+    if (e.key === '+' || e.key === '=') zoomIn();
+    if (e.key === '-') zoomOut();
+    if (e.key === '0') zoomReset();
+    if (e.key === 'Escape') cerrarVisor();
+});
+
+// ============================================
+// RESIZE
+// ============================================
+let resizeTimeout;
+window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+        if (pdfDocActual && !document.getElementById('visor').classList.contains('oculto')) {
+            mostrarPagina(paginaActual);
+        }
+    }, 300);
+});
+
+// ============================================
+// INICIAR
+// ============================================
+document.addEventListener('DOMContentLoaded', async () => {
+    await cargarListaPDFs();
+    
+    configurarArrastre();
+    
+    const docParam = obtenerDocDesdeURL();
+    if (docParam) {
+        const index = listaPDFs.findIndex((pdf, i) => {
+            const num = String(i + 1).padStart(2, '0');
+            return num === docParam || pdf.archivo.toLowerCase().includes(docParam.toLowerCase());
+        });
+        
+        if (index !== -1) {
+            setTimeout(() => abrirVisor(index), 500);
+        }
+    }
+});
+
+window.addEventListener('hashchange', () => {
+    const docParam = obtenerDocDesdeURL();
+    if (docParam) {
+        const index = listaPDFs.findIndex((pdf, i) => {
+            const num = String(i + 1).padStart(2, '0');
+            return num === docParam;
+        });
+        if (index !== -1) abrirVisor(index);
+    }
+});
