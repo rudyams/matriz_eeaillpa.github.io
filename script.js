@@ -15,7 +15,7 @@ let bloqueado = false;
 
 let zoomActual = 1;
 let zoomMin = 1;
-let zoomMax = 6;         // Subimos el máximo a 600% para móviles
+let zoomMax = 8;         // Subimos a 800% para máxima lectura
 let zoomPaso = 0.25;
 
 let arrastrando = false;
@@ -177,9 +177,10 @@ async function mostrarPagina(numeroPagina) {
         const ratio = viewportBase.width / viewportBase.height;
         
         // ===== ESPACIO DISPONIBLE =====
-        const padding = window.innerWidth <= 768 ? 100 : 140;
+        // Reducimos el padding en móvil para que el PDF se vea MÁS GRANDE
+        const padding = esMovil() ? 60 : 140;
         const anchoDisponible = wrapper.clientWidth - padding;
-        const altoDisponible = wrapper.clientHeight - 40;
+        const altoDisponible = wrapper.clientHeight - 30;
         
         // Calcular tamaño base para que quepa completo
         if (anchoDisponible / altoDisponible > ratio) {
@@ -191,28 +192,35 @@ async function mostrarPagina(numeroPagina) {
         }
         
         // ============================================================
-        // CLAVE: FACTOR DE CALIDAD ADAPTATIVO
+        // FACTOR DE CALIDAD ADAPTATIVO AL MÁXIMO
         // ============================================================
-        // En móviles, renderizamos a 4x para que al ampliar se vea nítido
-        // En PC con pantalla normal, 2x es suficiente
-        // En PC con pantalla retina, 3x
-        
         const dpr = window.devicePixelRatio || 1;
         let factorCalidad;
         
         if (esMovil()) {
-            // Móvil: máxima calidad para compensar la pantalla pequeña
-            factorCalidad = Math.max(dpr, 4);
+            // Móvil: usar 6x para máxima nitidez
+            factorCalidad = 6;
         } else if (esPantallaRetina()) {
-            // PC/tablet con pantalla retina
-            factorCalidad = Math.max(dpr, 3);
+            // PC/tablet retina
+            factorCalidad = Math.max(dpr, 4);
         } else {
             // PC normal
-            factorCalidad = Math.max(dpr, 2);
+            factorCalidad = 3;
         }
         
-        // Limitar para no consumir demasiada memoria (evitar crashes)
-        factorCalidad = Math.min(factorCalidad, 5);
+        // Limitar factor según el tamaño del canvas para evitar crash
+        // Un canvas mayor a 16 millones de píxeles puede fallar en móviles
+        const MAX_PIXELES = 16000000;
+        const anchoEstimado = viewportBase.width * factorCalidad * (anchoBaseActual / viewportBase.width);
+        const altoEstimado = viewportBase.height * factorCalidad * (anchoBaseActual / viewportBase.width);
+        const pixelesEstimados = anchoEstimado * altoEstimado;
+        
+        if (pixelesEstimados > MAX_PIXELES) {
+            factorCalidad = factorCalidad * Math.sqrt(MAX_PIXELES / pixelesEstimados);
+        }
+        
+        // Asegurar mínimo de 3x
+        factorCalidad = Math.max(factorCalidad, 3);
         
         const escalaRender = (anchoBaseActual / viewportBase.width) * factorCalidad;
         const viewportRender = page.getViewport({ scale: escalaRender });
@@ -223,18 +231,45 @@ async function mostrarPagina(numeroPagina) {
         canvas.height = viewportRender.height;
         canvas.style.display = 'block';
         
-        const context = canvas.getContext('2d', { alpha: false });
+        // Contexto sin alpha para mejor rendimiento
+        const context = canvas.getContext('2d', { 
+            alpha: false,
+            willReadFrequently: false
+        });
+        
+        // Máxima calidad de suavizado
         context.imageSmoothingEnabled = true;
         context.imageSmoothingQuality = 'high';
         
-        // Fondo blanco para evitar transparencias
+        // Fondo blanco
         context.fillStyle = '#ffffff';
         context.fillRect(0, 0, canvas.width, canvas.height);
         
+        // ===== RENDERIZAR PDF =====
         await page.render({
             canvasContext: context,
             viewport: viewportRender
         }).promise;
+        
+        // Segunda pasada de suavizado para mejor calidad visual
+        // (Redibujamos el canvas sobre sí mismo con suavizado)
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = canvas.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.imageSmoothingEnabled = true;
+        tempCtx.imageSmoothingQuality = 'high';
+        tempCtx.drawImage(canvas, 0, 0);
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.imageSmoothingEnabled = true;
+        context.imageSmoothingQuality = 'high';
+        context.drawImage(tempCanvas, 0, 0);
+        
+        // Limpiar temporal
+        tempCanvas.width = 0;
+        tempCanvas.height = 0;
 
         container.innerHTML = '';
         container.appendChild(canvas);
@@ -277,12 +312,11 @@ function aplicarTamañoVisual() {
     canvas.style.width = anchoVisual + 'px';
     canvas.style.height = altoVisual + 'px';
     
-    // Contenedor del canvas: tamaño exacto del canvas
+    // Contenedor del canvas: tamaño exacto
     container.style.width = anchoVisual + 'px';
     container.style.height = altoVisual + 'px';
     
-    // El viewer debe ser AL MENOS del tamaño del wrapper para centrado,
-    // pero si el canvas es más grande, debe crecer para permitir el scroll.
+    // El viewer debe ser AL MENOS del tamaño del wrapper para centrado
     const anchoViewer = Math.max(anchoVisual, wrapper.clientWidth);
     const altoViewer = Math.max(altoVisual, wrapper.clientHeight);
     
@@ -560,12 +594,11 @@ function configurarArrastre() {
     wrapper.addEventListener('touchend', () => { arrastrando = false; });
     wrapper.addEventListener('touchcancel', () => { arrastrando = false; });
     
-    // ===== DOBLE CLIC / DOBLE TAP =====
+    // ===== DOBLE TAP =====
     let ultimoTap = 0;
     wrapper.addEventListener('touchend', (e) => {
         const ahora = Date.now();
         if (ahora - ultimoTap < 300) {
-            // Doble tap
             if (zoomActual > 1) {
                 zoomReset();
             } else {
@@ -584,6 +617,7 @@ function configurarArrastre() {
         ultimoTap = ahora;
     });
     
+    // ===== DOBLE CLIC (PC) =====
     wrapper.addEventListener('dblclick', (e) => {
         if (e.target.closest('button')) return;
         if (zoomActual > 1) {
