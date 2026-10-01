@@ -15,12 +15,16 @@ let bloqueado = false;
 
 let zoomActual = 1;
 let zoomMin = 1;
-let zoomMax = 4;
+let zoomMax = 5;
 let zoomPaso = 0.25;
 
 let arrastrando = false;
 let startX = 0, startY = 0;
 let scrollStartX = 0, scrollStartY = 0;
+
+// Tamaño base del documento (sin zoom)
+let anchoBaseActual = 0;
+let altoBaseActual = 0;
 
 // ============================================
 // CARGAR LISTA DE PDFs
@@ -161,38 +165,30 @@ async function mostrarPagina(numeroPagina) {
         const viewportBase = page.getViewport({ scale: 1 });
         const ratio = viewportBase.width / viewportBase.height;
         
-        // Espacio disponible (descontando padding del wrapper)
+        // Espacio disponible (descontando padding)
         const padding = window.innerWidth <= 768 ? 100 : 140;
         const anchoDisponible = wrapper.clientWidth - padding;
         const altoDisponible = wrapper.clientHeight - 40;
         
-        let anchoBase, altoBase;
-        
-        // Ajustar para que quepa completo (sin zoom)
+        // Calcular tamaño base para que quepa completo
         if (anchoDisponible / altoDisponible > ratio) {
-            altoBase = altoDisponible;
-            anchoBase = altoBase * ratio;
+            altoBaseActual = altoDisponible;
+            anchoBaseActual = altoBaseActual * ratio;
         } else {
-            anchoBase = anchoDisponible;
-            altoBase = anchoBase / ratio;
+            anchoBaseActual = anchoDisponible;
+            altoBaseActual = anchoBaseActual / ratio;
         }
         
-        // Dimensiones visuales con zoom aplicado
-        const anchoVisual = Math.round(anchoBase * zoomActual);
-        const altoVisual = Math.round(altoBase * zoomActual);
-        
-        // Renderizar a alta resolución (sin aplicar zoom al canvas interno)
+        // Renderizar a alta resolución
         const dpr = window.devicePixelRatio || 1;
         const factorCalidad = Math.min(Math.max(dpr, 2), 3);
-        const escalaRender = (anchoBase / viewportBase.width) * factorCalidad;
+        const escalaRender = (anchoBaseActual / viewportBase.width) * factorCalidad;
         
         const viewportRender = page.getViewport({ scale: escalaRender });
         
         const canvas = document.createElement('canvas');
         canvas.width = viewportRender.width;
         canvas.height = viewportRender.height;
-        canvas.style.width = anchoVisual + 'px';
-        canvas.style.height = altoVisual + 'px';
         canvas.style.display = 'block';
         
         const context = canvas.getContext('2d');
@@ -208,15 +204,12 @@ async function mostrarPagina(numeroPagina) {
         container.appendChild(canvas);
         container.style.opacity = '1';
         
-        // ========== ACTUALIZAR COMPORTAMIENTO DE SCROLL ==========
-        if (zoomActual > 1) {
-            wrapper.classList.add('zoom-activo');
-        } else {
-            wrapper.classList.remove('zoom-activo');
-        }
+        // Aplicar tamaño visual según el zoom actual
+        aplicarTamañoVisual();
         
-        // ========== CENTRAR DOCUMENTO DESPUÉS DEL RENDERIZADO ==========
-        // Esperamos 2 frames para asegurar que el navegador ya calculó el layout
+        // Actualizar comportamiento y centrar
+        actualizarComportamiento();
+        
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 centrarDocumento();
@@ -230,12 +223,58 @@ async function mostrarPagina(numeroPagina) {
 }
 
 // ============================================
+// APLICAR TAMAÑO VISUAL AL CANVAS Y AL CONTENEDOR
+// ============================================
+function aplicarTamañoVisual() {
+    const canvas = document.querySelector('#pdf-page-container canvas');
+    const container = document.getElementById('pdf-page-container');
+    const viewer = document.getElementById('pdf-viewer');
+    
+    if (!canvas || !container || !viewer) return;
+    
+    // Tamaño visual del canvas
+    const anchoVisual = Math.round(anchoBaseActual * zoomActual);
+    const altoVisual = Math.round(altoBaseActual * zoomActual);
+    
+    canvas.style.width = anchoVisual + 'px';
+    canvas.style.height = altoVisual + 'px';
+    
+    // 🔑 CLAVE: Forzar al contenedor y viewer a tener el tamaño completo del canvas
+    // para que el wrapper pueda desplazarse a los extremos
+    container.style.width = anchoVisual + 'px';
+    container.style.height = altoVisual + 'px';
+    
+    viewer.style.width = anchoVisual + 'px';
+    viewer.style.height = altoVisual + 'px';
+    
+    // Asegurar que el viewer no tenga restricciones
+    viewer.style.minWidth = anchoVisual + 'px';
+    viewer.style.minHeight = altoVisual + 'px';
+}
+
+// ============================================
+// ACTUALIZAR COMPORTAMIENTO DE SCROLL
+// ============================================
+function actualizarComportamiento() {
+    const wrapper = document.getElementById('pdf-wrapper');
+    if (!wrapper) return;
+    
+    if (zoomActual > 1) {
+        wrapper.classList.add('zoom-activo');
+    } else {
+        wrapper.classList.remove('zoom-activo');
+    }
+}
+
+// ============================================
 // CENTRAR DOCUMENTO EN EL WRAPPER
 // ============================================
 function centrarDocumento() {
     const wrapper = document.getElementById('pdf-wrapper');
     if (!wrapper) return;
     
+    // Si el contenido es más pequeño que el wrapper, centrar
+    // Si es más grande, centrar también
     const scrollX = (wrapper.scrollWidth - wrapper.clientWidth) / 2;
     const scrollY = (wrapper.scrollHeight - wrapper.clientHeight) / 2;
     
@@ -275,67 +314,59 @@ async function paginaSiguiente() {
 // ============================================
 function zoomIn() {
     if (zoomActual >= zoomMax) return;
-    const valorAnterior = zoomActual;
+    
+    // Guardar posición relativa del centro de la vista
+    const wrapper = document.getElementById('pdf-wrapper');
+    const centroX = (wrapper.scrollLeft + wrapper.clientWidth / 2) / wrapper.scrollWidth;
+    const centroY = (wrapper.scrollTop + wrapper.clientHeight / 2) / wrapper.scrollHeight;
+    
     zoomActual = Math.min(zoomActual + zoomPaso, zoomMax);
     actualizarZoom();
-    aplicarZoomSinReRender(valorAnterior);
+    aplicarTamañoVisual();
+    actualizarComportamiento();
+    
+    // Restaurar posición relativa del centro
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            wrapper.scrollLeft = centroX * wrapper.scrollWidth - wrapper.clientWidth / 2;
+            wrapper.scrollTop = centroY * wrapper.scrollHeight - wrapper.clientHeight / 2;
+        });
+    });
 }
 
 function zoomOut() {
     if (zoomActual <= zoomMin) return;
-    const valorAnterior = zoomActual;
+    
+    const wrapper = document.getElementById('pdf-wrapper');
+    const centroX = (wrapper.scrollLeft + wrapper.clientWidth / 2) / wrapper.scrollWidth;
+    const centroY = (wrapper.scrollTop + wrapper.clientHeight / 2) / wrapper.scrollHeight;
+    
     zoomActual = Math.max(zoomActual - zoomPaso, zoomMin);
     actualizarZoom();
-    aplicarZoomSinReRender(valorAnterior);
-}
-
-function zoomReset() {
-    const valorAnterior = zoomActual;
-    zoomActual = 1;
-    actualizarZoom();
-    aplicarZoomSinReRender(valorAnterior);
-}
-
-// Aplica el zoom solo cambiando el tamaño del canvas (sin re-renderizar)
-function aplicarZoomSinReRender(valorAnterior) {
-    const wrapper = document.getElementById('pdf-wrapper');
-    const canvas = document.querySelector('#pdf-page-container canvas');
+    aplicarTamañoVisual();
+    actualizarComportamiento();
     
-    if (!canvas) {
-        // Si no hay canvas, re-renderizar
-        mostrarPagina(paginaActual);
-        return;
-    }
-    
-    // Guardar posición relativa del scroll
-    const relScrollX = wrapper.scrollLeft / Math.max(1, wrapper.scrollWidth);
-    const relScrollY = wrapper.scrollTop / Math.max(1, wrapper.scrollHeight);
-    
-    // Calcular nuevas dimensiones
-    const anchoActual = parseFloat(canvas.style.width);
-    const altoActual = parseFloat(canvas.style.height);
-    const factor = zoomActual / valorAnterior;
-    
-    canvas.style.width = Math.round(anchoActual * factor) + 'px';
-    canvas.style.height = Math.round(altoActual * factor) + 'px';
-    
-    // Actualizar comportamiento
-    if (zoomActual > 1) {
-        wrapper.classList.add('zoom-activo');
-    } else {
-        wrapper.classList.remove('zoom-activo');
-    }
-    
-    // Ajustar scroll
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
             if (zoomActual === 1) {
                 centrarDocumento();
             } else {
-                // Mantener posición relativa
-                wrapper.scrollLeft = relScrollX * wrapper.scrollWidth - wrapper.clientWidth / 2;
-                wrapper.scrollTop = relScrollY * wrapper.scrollHeight - wrapper.clientHeight / 2;
+                wrapper.scrollLeft = centroX * wrapper.scrollWidth - wrapper.clientWidth / 2;
+                wrapper.scrollTop = centroY * wrapper.scrollHeight - wrapper.clientHeight / 2;
             }
+        });
+    });
+}
+
+function zoomReset() {
+    zoomActual = 1;
+    actualizarZoom();
+    aplicarTamañoVisual();
+    actualizarComportamiento();
+    
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            centrarDocumento();
         });
     });
 }
@@ -395,6 +426,16 @@ async function cerrarVisor() {
     const container = document.getElementById('pdf-page-container');
     container.innerHTML = '';
     container.style.opacity = '1';
+    container.style.width = '';
+    container.style.height = '';
+    
+    const viewer = document.getElementById('pdf-viewer');
+    if (viewer) {
+        viewer.style.width = '';
+        viewer.style.height = '';
+        viewer.style.minWidth = '';
+        viewer.style.minHeight = '';
+    }
     
     const wrapper = document.getElementById('pdf-wrapper');
     if (wrapper) {
@@ -455,7 +496,7 @@ function configurarArrastre() {
         }
     });
     
-    // ===== TÁCTIL (MÓVIL) =====
+    // ===== TÁCTIL =====
     wrapper.addEventListener('touchstart', (e) => {
         if (zoomActual <= 1) return;
         if (e.touches.length !== 1) return;
@@ -479,7 +520,7 @@ function configurarArrastre() {
     wrapper.addEventListener('touchend', () => { arrastrando = false; });
     wrapper.addEventListener('touchcancel', () => { arrastrando = false; });
     
-    // ===== DOBLE CLIC PARA ZOOM =====
+    // ===== DOBLE CLIC =====
     wrapper.addEventListener('dblclick', (e) => {
         if (e.target.closest('button')) return;
         if (zoomActual > 1) {
@@ -487,7 +528,15 @@ function configurarArrastre() {
         } else {
             zoomActual = 2;
             actualizarZoom();
-            aplicarZoomSinReRender(1);
+            aplicarTamañoVisual();
+            actualizarComportamiento();
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    const w = document.getElementById('pdf-wrapper');
+                    w.scrollLeft = (w.scrollWidth - w.clientWidth) / 2;
+                    w.scrollTop = (w.scrollHeight - w.clientHeight) / 2;
+                });
+            });
         }
     });
 }
@@ -513,7 +562,14 @@ window.addEventListener('resize', () => {
     clearTimeout(resizeTimeout);
     resizeTimeout = setTimeout(() => {
         if (pdfDocActual && !document.getElementById('visor').classList.contains('oculto')) {
-            mostrarPagina(paginaActual);
+            const zoomGuardado = zoomActual;
+            mostrarPagina(paginaActual).then(() => {
+                zoomActual = zoomGuardado;
+                actualizarZoom();
+                aplicarTamañoVisual();
+                actualizarComportamiento();
+                centrarDocumento();
+            });
         }
     }, 300);
 });
