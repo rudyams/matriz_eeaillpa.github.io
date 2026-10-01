@@ -14,7 +14,7 @@ let paginaActual = 1;
 let bloqueado = false;
 
 // Zoom
-let zoomActual = 1;        // 1 = ajustado a pantalla
+let zoomActual = 1;
 let zoomMin = 1;
 let zoomMax = 4;
 let zoomPaso = 0.25;
@@ -147,12 +147,14 @@ async function abrirVisor(index) {
 }
 
 // ============================================
-// MOSTRAR PÁGINA (ALTA RESOLUCIÓN)
+// MOSTRAR PÁGINA
 // ============================================
 async function mostrarPagina(numeroPagina) {
     if (!pdfDocActual) return;
 
     const container = document.getElementById('pdf-page-container');
+    const wrapper = document.getElementById('pdf-wrapper');
+    
     container.style.opacity = '0';
     
     await new Promise(resolve => setTimeout(resolve, 150));
@@ -163,39 +165,35 @@ async function mostrarPagina(numeroPagina) {
         const viewportBase = page.getViewport({ scale: 1 });
         const ratio = viewportBase.width / viewportBase.height;
         
-        const wrapper = document.getElementById('pdf-wrapper');
+        // Espacio disponible (dejamos un pequeño margen)
         const anchoDisponible = wrapper.clientWidth - 100;
         const altoDisponible = wrapper.clientHeight - 30;
         
-        let anchoFinal, altoFinal;
+        let anchoBase, altoBase;
         
+        // Calcular tamaño base para que quepa completo
         if (anchoDisponible / altoDisponible > ratio) {
-            altoFinal = altoDisponible;
-            anchoFinal = altoFinal * ratio;
+            altoBase = altoDisponible;
+            anchoBase = altoBase * ratio;
         } else {
-            anchoFinal = anchoDisponible;
-            altoFinal = anchoFinal / ratio;
+            anchoBase = anchoDisponible;
+            altoBase = anchoBase / ratio;
         }
         
-        // ========== CLAVE: ALTA RESOLUCIÓN ==========
-        // Usar devicePixelRatio para pantallas retina (celulares, tablets, monitores 4K)
+        // Dimensiones visuales finales (con zoom)
+        const anchoVisual = anchoBase * zoomActual;
+        const altoVisual = altoBase * zoomActual;
+        
+        // Renderizar a alta resolución
         const dpr = window.devicePixelRatio || 1;
-        
-        // Factor de calidad: renderizar al menos a 2x, y hasta 3x si la pantalla lo soporta
         const factorCalidad = Math.min(Math.max(dpr, 2), 3);
-        
-        // Escala real para renderizar el canvas a alta resolución
-        const escalaRender = (anchoFinal / viewportBase.width) * factorCalidad * zoomActual;
+        const escalaRender = (anchoBase / viewportBase.width) * factorCalidad;
         
         const viewportRender = page.getViewport({ scale: escalaRender });
         
         const canvas = document.createElement('canvas');
         canvas.width = viewportRender.width;
         canvas.height = viewportRender.height;
-        
-        // Tamaño visual = tamaño lógico * zoom
-        const anchoVisual = anchoFinal * zoomActual;
-        const altoVisual = altoFinal * zoomActual;
         canvas.style.width = anchoVisual + 'px';
         canvas.style.height = altoVisual + 'px';
         canvas.style.display = 'block';
@@ -206,21 +204,58 @@ async function mostrarPagina(numeroPagina) {
         
         await page.render({
             canvasContext: context,
-            viewport: viewportRender,
-            transform: [factorCalidad, 0, 0, factorCalidad, 0, 0]
+            viewport: viewportRender
         }).promise;
 
         container.innerHTML = '';
         container.appendChild(canvas);
-        
         container.style.opacity = '1';
         
-        // Actualizar dimensiones de scroll
-        actualizarScroll();
+        // ========== ACTUALIZAR COMPORTAMIENTO DE SCROLL ==========
+        actualizarComportamientoScroll();
+        
+        // ========== CENTRAR DOCUMENTO ==========
+        // Esperamos un momento para que el navegador calcule las dimensiones
+        requestAnimationFrame(() => {
+            if (zoomActual <= 1) {
+                // Al 100%, centrar
+                wrapper.scrollLeft = (wrapper.scrollWidth - wrapper.clientWidth) / 2;
+                wrapper.scrollTop = (wrapper.scrollHeight - wrapper.clientHeight) / 2;
+            } else {
+                // Con zoom, centrar también
+                wrapper.scrollLeft = (wrapper.scrollWidth - wrapper.clientWidth) / 2;
+                wrapper.scrollTop = (wrapper.scrollHeight - wrapper.clientHeight) / 2;
+            }
+        });
         
     } catch (error) {
         console.error('Error al renderizar página:', error);
         container.style.opacity = '1';
+    }
+}
+
+// ============================================
+// COMPORTAMIENTO DEL SCROLL SEGÚN EL ZOOM
+// ============================================
+function actualizarComportamientoScroll() {
+    const wrapper = document.getElementById('pdf-wrapper');
+    if (!wrapper) return;
+    
+    if (zoomActual > 1) {
+        // Con zoom: permitir scroll y arrastre
+        wrapper.style.overflow = 'auto';
+        wrapper.style.cursor = 'grab';
+        wrapper.style.alignItems = 'flex-start';
+        wrapper.style.justifyContent = 'flex-start';
+    } else {
+        // Al 100%: centrar sin scroll
+        wrapper.style.overflow = 'hidden';
+        wrapper.style.cursor = 'default';
+        wrapper.style.alignItems = 'center';
+        wrapper.style.justifyContent = 'center';
+        // Resetear scroll
+        wrapper.scrollLeft = 0;
+        wrapper.scrollTop = 0;
     }
 }
 
@@ -282,26 +317,6 @@ function actualizarZoom() {
 }
 
 // ============================================
-// ARRASTRE (cuando hay zoom)
-// ============================================
-function actualizarScroll() {
-    const wrapper = document.getElementById('pdf-wrapper');
-    if (!wrapper) return;
-    
-    if (zoomActual > 1) {
-        wrapper.style.cursor = 'grab';
-        wrapper.style.overflow = 'auto';
-        wrapper.style.alignItems = 'flex-start';
-        wrapper.style.justifyContent = 'flex-start';
-    } else {
-        wrapper.style.cursor = 'default';
-        wrapper.style.overflow = 'hidden';
-        wrapper.style.alignItems = 'center';
-        wrapper.style.justifyContent = 'center';
-    }
-}
-
-// ============================================
 // ACTUALIZAR INDICADORES
 // ============================================
 function actualizarIndicadores() {
@@ -340,6 +355,7 @@ async function cerrarVisor() {
     totalPaginas = 1;
     zoomActual = 1;
     bloqueado = false;
+    arrastrando = false;
     
     document.getElementById('visor').classList.add('oculto');
     document.querySelector('.galeria-container').style.display = 'block';
@@ -364,62 +380,76 @@ function obtenerDocDesdeURL() {
 }
 
 // ============================================
-// EVENTOS DE ARRASTRE
+// CONFIGURAR ARRASTRE (MOUSE + TÁCTIL)
 // ============================================
 function configurarArrastre() {
     const wrapper = document.getElementById('pdf-wrapper');
-    if (!wrapper) return;
+    if (!wrapper || wrapper.dataset.arrastreConfigurado === '1') return;
+    wrapper.dataset.arrastreConfigurado = '1';
     
+    // ===== MOUSE =====
     wrapper.addEventListener('mousedown', (e) => {
         if (zoomActual <= 1) return;
+        // Ignorar clics en botones
+        if (e.target.closest('button')) return;
+        
         arrastrando = true;
-        startX = e.pageX;
-        startY = e.pageY;
+        startX = e.clientX;
+        startY = e.clientY;
         scrollStartX = wrapper.scrollLeft;
         scrollStartY = wrapper.scrollTop;
         wrapper.style.cursor = 'grabbing';
         e.preventDefault();
     });
     
-    wrapper.addEventListener('mousemove', (e) => {
+    document.addEventListener('mousemove', (e) => {
         if (!arrastrando) return;
         e.preventDefault();
-        const walkX = e.pageX - startX;
-        const walkY = e.pageY - startY;
+        const walkX = e.clientX - startX;
+        const walkY = e.clientY - startY;
         wrapper.scrollLeft = scrollStartX - walkX;
         wrapper.scrollTop = scrollStartY - walkY;
     });
     
-    wrapper.addEventListener('mouseup', () => {
-        arrastrando = false;
-        if (zoomActual > 1) wrapper.style.cursor = 'grab';
+    document.addEventListener('mouseup', () => {
+        if (arrastrando) {
+            arrastrando = false;
+            wrapper.style.cursor = zoomActual > 1 ? 'grab' : 'default';
+        }
     });
     
-    wrapper.addEventListener('mouseleave', () => {
-        arrastrando = false;
-        if (zoomActual > 1) wrapper.style.cursor = 'grab';
-    });
-    
-    // Táctil para móvil
+    // ===== TÁCTIL (MÓVIL) =====
     wrapper.addEventListener('touchstart', (e) => {
-        if (zoomActual <= 1 || e.touches.length !== 1) return;
+        if (zoomActual <= 1) return;
+        if (e.touches.length !== 1) return;
+        if (e.target.closest('button')) return;
+        
         arrastrando = true;
-        startX = e.touches[0].pageX;
-        startY = e.touches[0].pageY;
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
         scrollStartX = wrapper.scrollLeft;
         scrollStartY = wrapper.scrollTop;
     }, { passive: true });
     
     wrapper.addEventListener('touchmove', (e) => {
         if (!arrastrando || e.touches.length !== 1) return;
-        const walkX = e.touches[0].pageX - startX;
-        const walkY = e.touches[0].pageY - startY;
+        const walkX = e.touches[0].clientX - startX;
+        const walkY = e.touches[0].clientY - startY;
         wrapper.scrollLeft = scrollStartX - walkX;
         wrapper.scrollTop = scrollStartY - walkY;
     }, { passive: true });
     
     wrapper.addEventListener('touchend', () => {
         arrastrando = false;
+    });
+    
+    wrapper.addEventListener('touchcancel', () => {
+        arrastrando = false;
+    });
+    
+    // Cambiar el cursor al pasar sobre el wrapper
+    wrapper.addEventListener('mouseenter', () => {
+        if (zoomActual > 1) wrapper.style.cursor = 'grab';
     });
 }
 
@@ -428,7 +458,8 @@ function configurarArrastre() {
 // ============================================
 function configurarDobleClic() {
     const container = document.getElementById('pdf-page-container');
-    if (!container) return;
+    if (!container || container.dataset.dobleClic === '1') return;
+    container.dataset.dobleClic = '1';
     
     container.addEventListener('dblclick', () => {
         if (zoomActual > 1) {
@@ -448,11 +479,10 @@ document.addEventListener('keydown', (e) => {
     if (document.getElementById('visor').classList.contains('oculto')) return;
     if (e.key === 'ArrowLeft') paginaAnterior();
     if (e.key === 'ArrowRight') paginaSiguiente();
-    if (e.key === 'ArrowUp') zoomIn();
-    if (e.key === 'ArrowDown') zoomOut();
-    if (e.key === 'Escape') cerrarVisor();
     if (e.key === '+' || e.key === '=') zoomIn();
     if (e.key === '-') zoomOut();
+    if (e.key === 'Escape') cerrarVisor();
+    if (e.key === '0') zoomReset();
 });
 
 // ============================================
@@ -474,11 +504,9 @@ window.addEventListener('resize', () => {
 document.addEventListener('DOMContentLoaded', async () => {
     await cargarListaPDFs();
     
-    // Configurar eventos después de que el DOM esté listo
-    setTimeout(() => {
-        configurarArrastre();
-        configurarDobleClic();
-    }, 500);
+    // Configurar eventos (se ejecutan una sola vez)
+    configurarArrastre();
+    configurarDobleClic();
     
     // Detectar ?doc=XX en la URL
     const docParam = obtenerDocDesdeURL();
