@@ -207,9 +207,10 @@ async function mostrarPagina(numeroPagina) {
         // Aplicar tamaño visual según el zoom actual
         aplicarTamañoVisual();
         
-        // Actualizar comportamiento y centrar
+        // Actualizar comportamiento
         actualizarComportamiento();
         
+        // Centrar después del renderizado
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 centrarDocumento();
@@ -223,14 +224,15 @@ async function mostrarPagina(numeroPagina) {
 }
 
 // ============================================
-// APLICAR TAMAÑO VISUAL AL CANVAS Y AL CONTENEDOR
+// APLICAR TAMAÑO VISUAL
 // ============================================
 function aplicarTamañoVisual() {
     const canvas = document.querySelector('#pdf-page-container canvas');
     const container = document.getElementById('pdf-page-container');
     const viewer = document.getElementById('pdf-viewer');
+    const wrapper = document.getElementById('pdf-wrapper');
     
-    if (!canvas || !container || !viewer) return;
+    if (!canvas || !container || !viewer || !wrapper) return;
     
     // Tamaño visual del canvas
     const anchoVisual = Math.round(anchoBaseActual * zoomActual);
@@ -239,17 +241,19 @@ function aplicarTamañoVisual() {
     canvas.style.width = anchoVisual + 'px';
     canvas.style.height = altoVisual + 'px';
     
-    // 🔑 CLAVE: Forzar al contenedor y viewer a tener el tamaño completo del canvas
-    // para que el wrapper pueda desplazarse a los extremos
+    // Contenedor del canvas: tamaño exacto del canvas
     container.style.width = anchoVisual + 'px';
     container.style.height = altoVisual + 'px';
     
-    viewer.style.width = anchoVisual + 'px';
-    viewer.style.height = altoVisual + 'px';
+    // 🔑 CLAVE: El viewer debe ser AL MENOS del tamaño del wrapper para permitir centrado,
+    // pero si el canvas es más grande, debe crecer para permitir el scroll.
+    const anchoViewer = Math.max(anchoVisual, wrapper.clientWidth);
+    const altoViewer = Math.max(altoVisual, wrapper.clientHeight);
     
-    // Asegurar que el viewer no tenga restricciones
-    viewer.style.minWidth = anchoVisual + 'px';
-    viewer.style.minHeight = altoVisual + 'px';
+    viewer.style.width = anchoViewer + 'px';
+    viewer.style.height = altoViewer + 'px';
+    viewer.style.minWidth = anchoViewer + 'px';
+    viewer.style.minHeight = altoViewer + 'px';
 }
 
 // ============================================
@@ -267,15 +271,16 @@ function actualizarComportamiento() {
 }
 
 // ============================================
-// CENTRAR DOCUMENTO EN EL WRAPPER
+// CENTRAR DOCUMENTO
 // ============================================
 function centrarDocumento() {
     const wrapper = document.getElementById('pdf-wrapper');
-    if (!wrapper) return;
+    const viewer = document.getElementById('pdf-viewer');
+    if (!wrapper || !viewer) return;
     
-    // Si el contenido es más pequeño que el wrapper, centrar
-    // Si es más grande, centrar también
+    // Centrar horizontalmente
     const scrollX = (wrapper.scrollWidth - wrapper.clientWidth) / 2;
+    // Centrar verticalmente
     const scrollY = (wrapper.scrollHeight - wrapper.clientHeight) / 2;
     
     wrapper.scrollLeft = Math.max(0, scrollX);
@@ -315,21 +320,23 @@ async function paginaSiguiente() {
 function zoomIn() {
     if (zoomActual >= zoomMax) return;
     
-    // Guardar posición relativa del centro de la vista
     const wrapper = document.getElementById('pdf-wrapper');
-    const centroX = (wrapper.scrollLeft + wrapper.clientWidth / 2) / wrapper.scrollWidth;
-    const centroY = (wrapper.scrollTop + wrapper.clientHeight / 2) / wrapper.scrollHeight;
+    const centroX = (wrapper.scrollLeft + wrapper.clientWidth / 2) / Math.max(1, wrapper.scrollWidth);
+    const centroY = (wrapper.scrollTop + wrapper.clientHeight / 2) / Math.max(1, wrapper.scrollHeight);
     
     zoomActual = Math.min(zoomActual + zoomPaso, zoomMax);
     actualizarZoom();
     aplicarTamañoVisual();
     actualizarComportamiento();
     
-    // Restaurar posición relativa del centro
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-            wrapper.scrollLeft = centroX * wrapper.scrollWidth - wrapper.clientWidth / 2;
-            wrapper.scrollTop = centroY * wrapper.scrollHeight - wrapper.clientHeight / 2;
+            if (zoomActual === 1) {
+                centrarDocumento();
+            } else {
+                wrapper.scrollLeft = centroX * wrapper.scrollWidth - wrapper.clientWidth / 2;
+                wrapper.scrollTop = centroY * wrapper.scrollHeight - wrapper.clientHeight / 2;
+            }
         });
     });
 }
@@ -338,8 +345,8 @@ function zoomOut() {
     if (zoomActual <= zoomMin) return;
     
     const wrapper = document.getElementById('pdf-wrapper');
-    const centroX = (wrapper.scrollLeft + wrapper.clientWidth / 2) / wrapper.scrollWidth;
-    const centroY = (wrapper.scrollTop + wrapper.clientHeight / 2) / wrapper.scrollHeight;
+    const centroX = (wrapper.scrollLeft + wrapper.clientWidth / 2) / Math.max(1, wrapper.scrollWidth);
+    const centroY = (wrapper.scrollTop + wrapper.clientHeight / 2) / Math.max(1, wrapper.scrollHeight);
     
     zoomActual = Math.max(zoomActual - zoomPaso, zoomMin);
     actualizarZoom();
@@ -532,9 +539,7 @@ function configurarArrastre() {
             actualizarComportamiento();
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
-                    const w = document.getElementById('pdf-wrapper');
-                    w.scrollLeft = (w.scrollWidth - w.clientWidth) / 2;
-                    w.scrollTop = (w.scrollHeight - w.clientHeight) / 2;
+                    centrarDocumento();
                 });
             });
         }
