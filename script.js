@@ -458,4 +458,50 @@ document.addEventListener('keydown', (e) => {
 // ============================================
 // RESIZE
 // ============================================
-let resizeTimeout
+let resizeTimeout;
+window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+        if (pdfDocActual && !document.getElementById('visor').classList.contains('oculto')) {
+            mostrarPagina(paginaActual);
+        }
+    }, 300);
+});
+
+// ============================================
+// INICIAR
+// ============================================
+document.addEventListener('DOMContentLoaded', async () => {
+    await cargarListaPDFs();
+    
+    // Configurar eventos después de que el DOM esté listo
+    setTimeout(() => {
+        configurarArrastre();
+        configurarDobleClic();
+    }, 500);
+    
+    // Detectar ?doc=XX en la URL
+    const docParam = obtenerDocDesdeURL();
+    if (docParam) {
+        const index = listaPDFs.findIndex((pdf, i) => {
+            const num = String(i + 1).padStart(2, '0');
+            return num === docParam || pdf.archivo.toLowerCase().includes(docParam.toLowerCase());
+        });
+        
+        if (index !== -1) {
+            setTimeout(() => abrirVisor(index), 500);
+        }
+    }
+});
+
+// Escuchar cambios en el hash
+window.addEventListener('hashchange', () => {
+    const docParam = obtenerDocDesdeURL();
+    if (docParam) {
+        const index = listaPDFs.findIndex((pdf, i) => {
+            const num = String(i + 1).padStart(2, '0');
+            return num === docParam;
+        });
+        if (index !== -1) abrirVisor(index);
+    }
+});
