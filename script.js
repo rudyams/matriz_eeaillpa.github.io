@@ -700,9 +700,9 @@ window.addEventListener('hashchange', () => {
         if (index !== -1) abrirVisor(index);
     }
 // ============================================
-// DESCARGAR PDF (VERSIÓN ROBUSTA)
+// DESCARGAR PDF (COMPATIBLE CON MÓVILES)
 // ============================================
-async function descargarPDF() {
+function descargarPDF() {
     // Verificar que haya un documento abierto
     if (!pdfDocActual || !listaPDFs.length) {
         alert('No hay ningún documento abierto.');
@@ -722,60 +722,29 @@ async function descargarPDF() {
     const btn = document.querySelector('.btn-descargar');
     const textoOriginal = btn ? btn.innerHTML : '';
     if (btn) {
-        btn.innerHTML = '<span>⏳</span> Descargando...';
+        btn.innerHTML = '<span>📄</span> Abriendo...';
         btn.disabled = true;
         btn.style.opacity = '0.7';
     }
     
     try {
-        // Obtener el PDF como blob (esto funciona siempre)
-        const respuesta = await fetch(pdfActual.archivo, {
-            cache: 'no-store'
-        });
+        // ✅ SOLUCIÓN: Abrir el PDF en una nueva pestaña
+        // Esto funciona en todos los navegadores, incluidos iOS y Android.
+        window.open(pdfActual.archivo, '_blank');
         
-        if (!respuesta.ok) throw new Error('No se pudo descargar');
-        
-        const blob = await respuesta.blob();
-        
-        // Crear URL temporal del blob
-        const urlBlob = window.URL.createObjectURL(blob);
-        
-        // Nombre del archivo
-        const nombreArchivo = pdfActual.titulo
-            .replace(/[^a-z0-9áéíóúñ\s-]/gi, '')
-            .trim()
-            .replace(/\s+/g, '_') + '.pdf';
-        
-        // Crear enlace temporal y forzar descarga
-        const enlace = document.createElement('a');
-        enlace.href = urlBlob;
-        enlace.download = nombreArchivo;
-        enlace.style.display = 'none';
-        
-        document.body.appendChild(enlace);
-        enlace.click();
-        
-        // Limpiar después de un momento
-        setTimeout(() => {
-            document.body.removeChild(enlace);
-            window.URL.revokeObjectURL(urlBlob);
-        }, 1000);
-        
-        // Éxito
+        // Éxito visual
         if (btn) {
-            btn.innerHTML = '<span>✓</span> Descargado';
-            btn.style.background = '#4A7D24';
+            btn.innerHTML = '<span>✓</span> Abierto';
             setTimeout(() => {
                 btn.innerHTML = textoOriginal;
-                btn.style.background = '';
                 btn.disabled = false;
                 btn.style.opacity = '1';
             }, 2000);
         }
         
     } catch (error) {
-        console.error('Error al descargar:', error);
-        alert('No se pudo descargar el archivo. Intenta de nuevo.');
+        console.error('Error al abrir:', error);
+        alert('No se pudo abrir el archivo. Intenta de nuevo.');
         
         // Restaurar botón
         if (btn) {
