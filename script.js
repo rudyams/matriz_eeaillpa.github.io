@@ -699,4 +699,53 @@ window.addEventListener('hashchange', () => {
         });
         if (index !== -1) abrirVisor(index);
     }
+// ============================================
+// DESCARGAR PDF
+// ============================================
+function descargarPDF() {
+    // Verificar que haya un documento abierto
+    if (!pdfDocActual || !listaPDFs.length) {
+        alert('No hay ningún documento abierto.');
+        return;
+    }
+    
+    // Obtener el índice del documento actual
+    const tituloActual = document.getElementById('titulo-libro').textContent;
+    const pdfActual = listaPDFs.find(p => p.titulo === tituloActual);
+    
+    if (!pdfActual) {
+        alert('No se pudo identificar el documento.');
+        return;
+    }
+    
+    // Crear enlace de descarga
+    const enlace = document.createElement('a');
+    enlace.href = pdfActual.archivo;
+    
+    // Nombre del archivo: usar el título y agregar .pdf
+    const nombreArchivo = pdfActual.titulo
+        .replace(/[^a-z0-9áéíóúñ\s-]/gi, '') // Limpiar caracteres especiales
+        .trim()
+        .replace(/\s+/g, '_') + '.pdf';
+    
+    enlace.download = nombreArchivo;
+    enlace.target = '_blank';
+    
+    // Ejecutar la descarga
+    document.body.appendChild(enlace);
+    enlace.click();
+    document.body.removeChild(enlace);
+    
+    // Feedback visual
+    const btn = document.querySelector('.btn-descargar');
+    if (btn) {
+        const textoOriginal = btn.innerHTML;
+        btn.innerHTML = '<span>✓</span> Descargando...';
+        btn.style.background = '#4A7D24';
+        setTimeout(() => {
+            btn.innerHTML = textoOriginal;
+            btn.style.background = '';
+        }, 2000);
+    }
+}
 });
