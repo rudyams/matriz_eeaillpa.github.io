@@ -700,7 +700,7 @@ window.addEventListener('hashchange', () => {
         if (index !== -1) abrirVisor(index);
     }
 // ============================================
-// ABRIR PDF EN NUEVA PESTAÑA (COMPATIBLE CON MÓVIL)
+// DESCARGAR PDF (ENLACE DIRECTO COMPATIBLE)
 // ============================================
 function descargarPDF() {
     // Verificar que haya un documento abierto
@@ -727,20 +727,17 @@ function descargarPDF() {
         btn.style.opacity = '0.7';
     }
     
-    // Abrir el PDF en una nueva pestaña
-    // Este es el método más compatible con todos los navegadores
-    const nuevaPestana = window.open(pdfActual.archivo, '_blank');
+    // ✅ SOLUCIÓN: Usar un enlace directo (el navegador decide qué hacer)
+    // Esto es lo más compatible que existe.
+    const enlace = document.createElement('a');
+    enlace.href = pdfActual.archivo;
+    enlace.target = '_blank'; // Abre en nueva pestaña para no perder la app
+    enlace.rel = 'noopener noreferrer';
     
-    // Si el navegador bloqueó la nueva pestaña, intentar con un enlace directo
-    if (!nuevaPestana) {
-        const enlace = document.createElement('a');
-        enlace.href = pdfActual.archivo;
-        enlace.target = '_blank';
-        enlace.rel = 'noopener noreferrer';
-        document.body.appendChild(enlace);
-        enlace.click();
-        document.body.removeChild(enlace);
-    }
+    // Añadir al DOM, hacer clic y quitarlo (método estándar y seguro)
+    document.body.appendChild(enlace);
+    enlace.click();
+    document.body.removeChild(enlace);
     
     // Restaurar el botón después de un momento
     if (btn) {
