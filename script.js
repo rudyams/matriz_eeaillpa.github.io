@@ -700,7 +700,7 @@ window.addEventListener('hashchange', () => {
         if (index !== -1) abrirVisor(index);
     }
 // ============================================
-// DESCARGAR PDF (COMPATIBLE CON MÓVILES)
+// ABRIR PDF EN NUEVA PESTAÑA (MÁS COMPATIBLE)
 // ============================================
 function descargarPDF() {
     // Verificar que haya un documento abierto
@@ -727,31 +727,16 @@ function descargarPDF() {
         btn.style.opacity = '0.7';
     }
     
-    try {
-        // ✅ SOLUCIÓN: Abrir el PDF en una nueva pestaña
-        // Esto funciona en todos los navegadores, incluidos iOS y Android.
-        window.open(pdfActual.archivo, '_blank');
-        
-        // Éxito visual
-        if (btn) {
-            btn.innerHTML = '<span>✓</span> Abierto';
-            setTimeout(() => {
-                btn.innerHTML = textoOriginal;
-                btn.disabled = false;
-                btn.style.opacity = '1';
-            }, 2000);
-        }
-        
-    } catch (error) {
-        console.error('Error al abrir:', error);
-        alert('No se pudo abrir el archivo. Intenta de nuevo.');
-        
-        // Restaurar botón
-        if (btn) {
+    // Abrir el PDF en una nueva pestaña
+    window.open(pdfActual.archivo, '_blank');
+    
+    // Restaurar el botón después de un momento
+    if (btn) {
+        setTimeout(() => {
             btn.innerHTML = textoOriginal;
             btn.disabled = false;
             btn.style.opacity = '1';
-        }
+        }, 1500);
     }
 }
 });
