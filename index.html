@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MATRIZ IPERC</title>
+    <title>MATRIZ IPERC 2026</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
@@ -43,10 +43,15 @@
         </div>
         
         <div class="zoom-bar">
-            <button class="zoom-btn" onclick="zoomOut()" title="Reducir">−</button>
-            <span id="zoom-nivel" class="zoom-nivel">100%</span>
-            <button class="zoom-btn" onclick="zoomIn()" title="Ampliar">+</button>
-            <button class="zoom-btn zoom-reset" onclick="zoomReset()" title="Ajustar a pantalla">⤢</button>
+            <div class="zoom-group">
+                <button class="zoom-btn" onclick="zoomOut()" title="Reducir">−</button>
+                <span id="zoom-nivel" class="zoom-nivel">100%</span>
+                <button class="zoom-btn" onclick="zoomIn()" title="Ampliar">+</button>
+                <button class="zoom-btn zoom-reset" onclick="zoomReset()" title="Ajustar a pantalla">⤢</button>
+            </div>
+            <button class="btn-descargar" onclick="descargarPDF()" title="Descargar PDF">
+                <span>⬇</span> Descargar
+            </button>
         </div>
 
         <div class="pdf-wrapper" id="pdf-wrapper">
