@@ -700,7 +700,7 @@ window.addEventListener('hashchange', () => {
         if (index !== -1) abrirVisor(index);
     }
 // ============================================
-// ABRIR PDF EN NUEVA PESTAÑA (MÁS COMPATIBLE)
+// ABRIR PDF EN NUEVA PESTAÑA (COMPATIBLE CON MÓVIL)
 // ============================================
 function descargarPDF() {
     // Verificar que haya un documento abierto
@@ -728,7 +728,19 @@ function descargarPDF() {
     }
     
     // Abrir el PDF en una nueva pestaña
-    window.open(pdfActual.archivo, '_blank');
+    // Este es el método más compatible con todos los navegadores
+    const nuevaPestana = window.open(pdfActual.archivo, '_blank');
+    
+    // Si el navegador bloqueó la nueva pestaña, intentar con un enlace directo
+    if (!nuevaPestana) {
+        const enlace = document.createElement('a');
+        enlace.href = pdfActual.archivo;
+        enlace.target = '_blank';
+        enlace.rel = 'noopener noreferrer';
+        document.body.appendChild(enlace);
+        enlace.click();
+        document.body.removeChild(enlace);
+    }
     
     // Restaurar el botón después de un momento
     if (btn) {
